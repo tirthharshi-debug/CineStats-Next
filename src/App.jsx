@@ -180,7 +180,7 @@ function UploadModal({ onClose, onComplete }) {
             <div className="processing-reel"><LoaderCircle size={31} strokeWidth={1.3} /></div>
             <span className="eyebrow">{phase === 'uploading' ? 'SENDING THE REEL' : 'IN THE CUTTING ROOM'}</span>
             <h3>{phase === 'uploading' ? 'Getting your archive on screen.' : 'Finding the shape of your taste.'}</h3>
-            <p>{phase === 'uploading' ? 'Uploading your export securely to the configured API.' : jobProgress.status === 'enriching' ? 'Matching films, one frame at a time.' : 'Reading your diary and preparing your stats.'}</p>
+            <p>{phase === 'uploading' ? 'Uploading your export to the configured API.' : jobProgress.status === 'enriching' ? 'Matching films, one frame at a time.' : 'Reading your diary and preparing your stats.'}</p>
             <div className="progress-track"><span style={{ width: (phase === 'uploading' ? uploadProgress : movieCount) + '%' }} /></div>
             <div className="progress-label"><span>{phase === 'uploading' ? uploadProgress + '% uploaded' : (jobProgress.current + ' / ' + jobProgress.total + ' titles enriched')}</span><span>{phase === 'processing' && movieCount ? movieCount + '%' : ''}</span></div>
             {error ? <p className="form-error"><AlertCircle size={15} /> {error}</p> : null}
