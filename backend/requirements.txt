@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pandas
+numpy
+httpx
+python-multipart
+aiosqlite
+aiofiles
+reportlab

@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+uploads/
+__pycache__/
+*.py[cod]
+.venv/
+venv/

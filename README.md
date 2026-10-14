@@ -2,68 +2,84 @@
 
 > Your personal cinematheque. A film diary, a record of your taste, and a love letter to the movies that stay with you.
 
-CineStats Next is a new, cinema-first evolution of CineStats. Its visual direction takes cues from repertory cinema programmes, independent film journals, archival catalogues and beautifully printed festival guides.
+CineStats Next is a cinema-first evolution of CineStats, taking visual cues from repertory cinema programmes, independent film journals, archival catalogues and beautifully printed festival guides. The original CineStats repository and live deployment remain separate.
 
-## Design principles
+## The current build
 
-- **Cinema first:** film-inspired artwork, editorial typography and thoughtful curation come before charts.
-- **A personal archive:** stats should reveal viewing habits, taste and memories, not reduce cinema to counts.
-- **Warm, tactile visual language:** near-black charcoal, warm ivory, film-red accents and restrained brass.
-- **Honest data:** no invented viewing statistics or demo results presented as a user's real diary.
-- **Preserve the engine:** reuse the existing analytics backend where it is sound, while improving production concerns deliberately.
+- Editorial landing page with warm ivory typography, charcoal backgrounds, film-red accents and brass details.
+- Poster-inspired artwork made from CSS rather than fake user data.
+- Letterboxd ZIP import dialog with drag-and-drop, upload progress, processing status and clear error states.
+- API client for upload, per-job progress, result retrieval and PDF export.
+- An initial data-backed analytics screen with viewing-year and rating charts, plus first/most recent diary entries and rewatches.
+- GitHub Actions workflow to install dependencies and verify the Vite production build.
 
-## Current implementation
+The current screen intentionally surfaces only an initial subset of the original API's analytics. More advanced genre, director, actor, country, language, runtime, monthly, decade and community views remain on the roadmap.
 
-- Responsive cinematic landing page with poster-inspired artwork.
-- Letterboxd export import dialog with drag-and-drop, file extension and 10 MB size checks.
-- Real upload, per-job progress polling, result retrieval, and PDF export API calls.
-- Overview metrics using actual API payload data.
-- Viewing-year and rating-distribution charts, plus first/most recent diary entry and rewatch summaries.
-- Configurable API URL using `VITE_API_BASE_URL`.
-- GitHub Actions workflow that installs dependencies and verifies the Vite production build on pushes and pull requests.
+## Stack
 
-## API configuration
+- **Frontend:** React, Vite, Framer Motion, Recharts, Lucide
+- **Backend:** FastAPI, Pandas, SQLite/aiosqlite, TMDB API
+- **Data source:** Your own Letterboxd export ZIP, enriched via TMDB
 
-For now, the default API points to the original CineStats hosted backend as a compatibility bridge:
+## Local full-stack setup
 
-```env
-VITE_API_BASE_URL=https://letterboxd-stats-vuaq.onrender.com/api
+Requirements: Node.js 20+ (Node 22 recommended), npm, and Python 3.11+.
+
+### 1. Backend
+
+```bash
+cd backend
+python -m venv .venv
+# Windows PowerShell:
+.venv\\Scripts\\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
+pip install -r requirements.txt
+copy .env.example .env
 ```
 
-Copy `.env.example` to `.env` and change this value when a dedicated CineStats Next backend is deployed. Do not put TMDB API keys or other secrets in frontend environment variables.
+Edit `backend/.env` and add a real server-side `TMDB_API_KEY`. Never commit it.
 
-The new interface currently surfaces an initial selection of the existing API's analytics. More of the original Patron/advanced analytics, poster-led diary views and richer personal insights still need to be ported and verified.
+Start the API from inside the `backend` directory:
 
-## Local development
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-Requirements: Node.js 20+ (Node 22 recommended) and npm.
+API docs: http://127.0.0.1:8000/docs
+
+### 2. Frontend
+
+In another terminal, from the repository root:
 
 ```bash
 npm install
+copy .env.example .env
 npm run dev
 ```
 
-Create a production build:
+Open the local URL printed by Vite. The root `.env.example` points the frontend to `http://localhost:8000/api`. For a deployed frontend, set `VITE_API_BASE_URL` to the deployed backend URL and redeploy.
 
-```bash
-npm run build
-npm run preview
-```
+## API endpoints currently used
+
+- `POST /api/upload`
+- `GET /api/progress/{job_id}`
+- `GET /api/results/{job_id}`
+- `GET /api/export/pdf/{job_id}`
+
+## Important production work still required
+
+The backend is an isolated copy of the existing baseline, not yet the final hardened release. Before public deployment, address the in-memory job queue (restart/multi-instance behavior), CORS origin policy, expanded ZIP/resource limits, job ownership/isolation, error handling and automated backend tests. The SQLite cache is for metadata; do not store Letterboxd exports or secrets in the repository. Render's ephemeral filesystem considerations must be reviewed before relying on cache persistence.
 
 ## Roadmap
 
-1. Port the rest of the existing analytics into the new interface without fabricating data.
-2. Add poster-led diary browsing, filters, director/genre/country/language details and richer personal insights.
-3. Improve upload and job reliability, resource limits, CORS and service monitoring in the backend.
-4. Add automated tests for import validation, polling, result rendering and PDF download.
-5. Deploy the frontend and its dedicated backend separately from the original CineStats application.
-
-## Status
-
-Early build — the first frontend production build passes in GitHub Actions. This is not yet a complete feature-for-feature replacement for the original deployment.
-
-Original project: https://github.com/tirthharshi-debug/CineStats
+1. Harden the copied backend and add focused tests.
+2. Port the rest of the existing analytics to the new cinematic UI without fabricating data.
+3. Add poster-led diary browsing, genre/director/actor/country/language details, richer personal insights and refined PDF output.
+4. Configure independent frontend/backend deployments and secrets.
 
 ## Attribution
 
-CineStats Next is an independent personal project for exploring a Letterboxd export. Letterboxd and TMDB are trademarks of their respective owners. This project is not affiliated with or endorsed by Letterboxd or TMDB.
+CineStats Next is an independent project for exploring a Letterboxd export. Letterboxd and TMDB belong to their respective owners. This project is not affiliated with or endorsed by Letterboxd or TMDB.
+
+Original project: https://github.com/tirthharshi-debug/CineStats
