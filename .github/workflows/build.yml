@@ -1,4 +1,4 @@
-name: Frontend build
+name: Frontend build and backend syntax
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  frontend-build:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -23,3 +23,15 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build frontend
         run: npm run build
+
+  backend-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile backend modules
+        run: python -m compileall -q backend/app
