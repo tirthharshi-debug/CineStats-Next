@@ -4,6 +4,9 @@ File service — extract Letterboxd ZIP and parse CSV files.
 import zipfile
 import os
 import io
+import shutil
+import stat
+import tempfile
 import pandas as pd
 import re
 from datetime import datetime
@@ -12,26 +15,49 @@ from datetime import datetime
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Guard against ZIP bombs and pathological archives on the memory-constrained service.
+MAX_ZIP_MEMBERS = 20_000
+MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024
+
 
 def extract_zip(file_bytes: bytes) -> str:
-    """Extract a Letterboxd ZIP to a timestamped folder. Returns extraction path."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    extract_path = os.path.join(UPLOAD_DIR, f"export_{timestamp}")
-    os.makedirs(extract_path, exist_ok=True)
+    """Safely extract a bounded ZIP archive into a unique temporary directory."""
+    extract_path = tempfile.mkdtemp(prefix="export_", dir=UPLOAD_DIR)
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+            members = zf.infolist()
+            if len(members) > MAX_ZIP_MEMBERS:
+                raise ValueError("This archive contains too many files to process.")
 
-    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
-        # SEC-01: Validate all paths before extraction to prevent Zip Slip attacks
-        abs_extract = os.path.abspath(extract_path)
-        for member in zf.infolist():
-            target_path = os.path.abspath(os.path.join(extract_path, member.filename))
-            if not (target_path.startswith(abs_extract + os.sep) or target_path == abs_extract):
+            expanded_size = sum(max(0, int(member.file_size)) for member in members)
+            if expanded_size > MAX_UNCOMPRESSED_SIZE:
                 raise ValueError(
-                    "🛑 Security alert: This ZIP archive contains unsafe file paths "
-                    "and cannot be processed."
+                    "This archive expands beyond the 100 MB processing limit. "
+                    "Please upload the original Letterboxd export."
                 )
-        zf.extractall(extract_path)
 
-    return extract_path
+            abs_extract = os.path.abspath(extract_path)
+            for member in members:
+                target_path = os.path.abspath(os.path.join(abs_extract, member.filename))
+                try:
+                    is_inside = os.path.commonpath([abs_extract, target_path]) == abs_extract
+                except ValueError:
+                    is_inside = False
+                if not is_inside:
+                    raise ValueError(
+                        "This ZIP archive contains an unsafe file path and cannot be processed."
+                    )
+
+                # Reject Unix symlink entries rather than allowing links to influence extraction.
+                unix_mode = (member.external_attr >> 16) & 0xFFFF
+                if stat.S_ISLNK(unix_mode):
+                    raise ValueError("This ZIP archive contains a symbolic link and cannot be processed.")
+
+            zf.extractall(abs_extract, members=members)
+        return abs_extract
+    except Exception:
+        shutil.rmtree(extract_path, ignore_errors=True)
+        raise
 
 
 def _find_csv(extract_path: str, name: str) -> str | None:

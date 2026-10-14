@@ -34,7 +34,8 @@ _jobs: dict[str, dict] = {}
 # Cleanup settings
 _CLEANUP_INTERVAL = 600   # 10 minutes
 _JOB_TTL = 1800           # 30 minutes after completion
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB compressed upload limit
+MAX_ACTIVE_JOBS = 2  # keep concurrent analysis bounded on small instances
 
 
 def _new_job() -> tuple[str, dict]:
@@ -185,7 +186,15 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
 
     except Exception as e:
         job["status"] = "error"
-        job["error"] = str(e)
+        # Expected validation errors are safe to show. Hide unexpected internals
+        # (paths, implementation details, and exception context) from API clients.
+        if isinstance(e, ValueError):
+            job["error"] = str(e)
+        else:
+            job["error"] = (
+                "The archive could not be processed. Check that it is a valid "
+                "Letterboxd export and try again."
+            )
         job["finished_at"] = time.time()
         traceback.print_exc()
 
@@ -204,34 +213,42 @@ async def upload_zip(file: UploadFile = File(...)):
     Upload a Letterboxd export ZIP. Kicks off background processing
     and returns immediately with a job_id. Poll /progress/{job_id} for status.
     """
-    if not file.filename.endswith('.zip'):
-        raise HTTPException(status_code=400, detail="Please upload a .zip file")
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".zip"):
+        await file.close()
+        raise HTTPException(status_code=400, detail="Please upload a .zip file exported from Letterboxd")
 
-    job_id, job = _new_job()
+    active_statuses = {"idle", "extracting", "parsing", "enriching", "computing"}
+    if sum(job["status"] in active_statuses for job in _jobs.values()) >= MAX_ACTIVE_JOBS:
+        await file.close()
+        raise HTTPException(status_code=429, detail="CineStats is processing other archives. Please try again shortly.")
 
-    # SEC-02: Read in chunks to reject oversized uploads without exhausting memory
+    # Read in chunks and always close the upload. Create the job only after
+    # validation so oversized uploads cannot leave orphaned idle jobs behind.
     chunks = []
     total_size = 0
-    while True:
-        chunk = await file.read(1024 * 1024)  # 1 MB chunks
-        if not chunk:
-            break
-        total_size += len(chunk)
-        if total_size > MAX_UPLOAD_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    "\ud83c\udfac That's a director's cut we can't handle.\n\n"
-                    "CineStats currently supports Letterboxd exports up to 10 MB."
-                ),
-            )
-        chunks.append(chunk)
+    try:
+        while True:
+            chunk = await file.read(1024 * 1024)  # 1 MB chunks
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail="CineStats currently supports Letterboxd exports up to 10 MB.",
+                )
+            chunks.append(chunk)
+    finally:
+        await file.close()
+
     contents = b"".join(chunks)
+    # Re-check after reading to close the race between simultaneous uploads.
+    if sum(job["status"] in active_statuses for job in _jobs.values()) >= MAX_ACTIVE_JOBS:
+        raise HTTPException(status_code=429, detail="CineStats is processing other archives. Please try again shortly.")
 
-    # Ensure the cleanup loop is running
+    job_id, job = _new_job()
     _ensure_cleanup_started()
-
-    # Fire and forget — runs in the background
     asyncio.create_task(_process_in_background(job_id, contents))
 
     return {"success": True, "message": "Processing started", "job_id": job_id}

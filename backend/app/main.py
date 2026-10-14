@@ -31,13 +31,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for local React dev server
+# Only allow configured frontend origins. Set CORS_ALLOWED_ORIGINS on deployment,
+# for example: https://your-app.vercel.app,https://your-custom-domain.example
+_allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*",],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Accept", "Content-Type"],
 )
 
 # Mount routes

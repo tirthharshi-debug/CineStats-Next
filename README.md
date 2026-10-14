@@ -6,20 +6,19 @@ CineStats Next is a cinema-first evolution of CineStats, taking visual cues from
 
 ## The current build
 
-- Editorial landing page with warm ivory typography, charcoal backgrounds, film-red accents and brass details.
+- Editorial landing page with warm ivory typography, charcoal backgrounds, film-red accents and restrained brass details.
 - Poster-inspired artwork made from CSS rather than fake user data.
-- Letterboxd ZIP import dialog with drag-and-drop, upload progress, processing status and clear error states.
-- API client for upload, per-job progress, result retrieval and PDF export.
-- An initial data-backed analytics screen with viewing-year and rating charts, plus first/most recent diary entries and rewatches.
-- GitHub Actions workflow to install dependencies and verify the Vite production build.
-
-The current screen intentionally surfaces only an initial subset of the original API's analytics. More advanced genre, director, actor, country, language, runtime, monthly, decade and community views remain on the roadmap.
+- Letterboxd ZIP import with file checks, upload progress, processing status and error states.
+- API client for upload, per-job progress, results and PDF export.
+- Data-backed sections for yearly/rating charts, genres, director and actor credits, runtime, watch calendar, monthly poster shelves, decade leaderboards, country/language patterns, crowd-rating comparisons and rating insights.
+- Isolated copy of the existing FastAPI/TMDB/SQLite/PDF backend with initial upload, ZIP and CORS hardening.
+- GitHub Actions checks for the React production build and Python backend tests/syntax.
 
 ## Stack
 
 - **Frontend:** React, Vite, Framer Motion, Recharts, Lucide
-- **Backend:** FastAPI, Pandas, SQLite/aiosqlite, TMDB API
-- **Data source:** Your own Letterboxd export ZIP, enriched via TMDB
+- **Backend:** FastAPI, Pandas, SQLite/aiosqlite, TMDB API, ReportLab
+- **Data source:** Your Letterboxd export ZIP, enriched via TMDB
 
 ## Local full-stack setup
 
@@ -38,9 +37,9 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Edit `backend/.env` and add a real server-side `TMDB_API_KEY`. Never commit it.
+Add a server-side `TMDB_API_KEY` to `backend/.env`. Never commit it.
 
-Start the API from inside the `backend` directory:
+Run from the `backend` directory:
 
 ```bash
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -58,25 +57,11 @@ copy .env.example .env
 npm run dev
 ```
 
-Open the local URL printed by Vite. The root `.env.example` points the frontend to `http://localhost:8000/api`. For a deployed frontend, set `VITE_API_BASE_URL` to the deployed backend URL and redeploy.
+Open the local URL printed by Vite. The root `.env.example` points to `http://localhost:8000/api`. For a deployed frontend, set `VITE_API_BASE_URL` to the deployed backend URL and redeploy.
 
-## API endpoints currently used
+## Current production-readiness boundary
 
-- `POST /api/upload`
-- `GET /api/progress/{job_id}`
-- `GET /api/results/{job_id}`
-- `GET /api/export/pdf/{job_id}`
-
-## Important production work still required
-
-The backend is an isolated copy of the existing baseline, not yet the final hardened release. Before public deployment, address the in-memory job queue (restart/multi-instance behavior), CORS origin policy, expanded ZIP/resource limits, job ownership/isolation, error handling and automated backend tests. The SQLite cache is for metadata; do not store Letterboxd exports or secrets in the repository. Render's ephemeral filesystem considerations must be reviewed before relying on cache persistence.
-
-## Roadmap
-
-1. Harden the copied backend and add focused tests.
-2. Port the rest of the existing analytics to the new cinematic UI without fabricating data.
-3. Add poster-led diary browsing, genre/director/actor/country/language details, richer personal insights and refined PDF output.
-4. Configure independent frontend/backend deployments and secrets.
+CineStats Next is an early, separate build—not a feature-for-feature production replacement yet. The copied backend now guards ZIP extraction and upload concurrency, and its CORS policy is configurable, but job state is still in memory and does not survive restarts or span instances. Before public multi-user deployment, add durable jobs, job ownership/access control, per-IP throttling, end-to-end tests and deployment-specific storage configuration. Do not treat the SQLite cache on an ephemeral host as permanent storage.
 
 ## Attribution
 
