@@ -529,8 +529,8 @@ a { color: inherit; text-decoration: none; }
 .footer-motto { font: 25px/1.42 var(--serif); color: var(--ink-soft); margin: 26px 0 0; }
 .footer-motto em { font-size: 22px; color: var(--red-light); }
 .archive-manifesto-inner { display: grid; grid-template-columns: minmax(240px, .78fr) minmax(0, 1fr); gap: clamp(42px, 8vw, 112px); align-items: center; }
-.archive-manifesto-art { position: relative; min-height: 315px; aspect-ratio: 4 / 5; border: 1px solid rgba(213,171,106,.28); background: #171512; display: block; overflow: hidden; }
-.archive-theatre-image { display: block; width: 100%; height: 100%; min-height: 315px; object-fit: cover; object-position: center; filter: brightness(.88) saturate(.88); transition: transform .7s cubic-bezier(.2,.7,.2,1), filter .5s ease; }
+.archive-manifesto-art { position: relative; min-height: 0; aspect-ratio: 4 / 3; border: 1px solid rgba(213,171,106,.28); background: #171512; display: block; overflow: hidden; }
+.archive-theatre-image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: brightness(.88) saturate(.88); transition: transform .7s cubic-bezier(.2,.7,.2,1), filter .5s ease; }
 .archive-manifesto-art:hover .archive-theatre-image { transform: scale(1.025); filter: brightness(.96) saturate(.94); }
 .archive-manifesto-art::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(20,19,17,.18), transparent 28%, transparent 66%, rgba(20,19,17,.45)); }
 .archive-frame-number, .archive-frame-caption { position: absolute; z-index: 1; color: var(--muted); font: 8px var(--mono); letter-spacing: .15em; }
@@ -563,7 +563,7 @@ a { color: inherit; text-decoration: none; }
 .intermission-stage .stage-done { color: var(--red-light); }
 @media (max-width: 760px) {
   .archive-manifesto-inner { grid-template-columns: 1fr; gap: 34px; }
-  .archive-manifesto-art { min-height: 230px; }
+  .archive-manifesto-art { min-height: 0; aspect-ratio: 4 / 3; }
   .archive-manifesto-copy .archive-bottom { align-items: flex-start; flex-direction: column; }
   .intermission-art { height: 150px; }
 }
