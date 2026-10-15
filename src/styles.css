@@ -570,3 +570,22 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .intermission-frame-front, .intermission-title { animation: none !important; }
 }
+
+
+/* Header and footer icons stay subdued until their control is hovered or focused. */
+.topbar svg,
+.site-footer svg {
+  opacity: .42;
+  transition: opacity .2s ease, filter .2s ease;
+}
+.topbar a:hover svg,
+.topbar button:hover svg,
+.topbar a:focus-visible svg,
+.topbar button:focus-visible svg,
+.site-footer a:hover svg,
+.site-footer button:hover svg,
+.site-footer a:focus-visible svg,
+.site-footer button:focus-visible svg {
+  opacity: 1;
+  filter: brightness(1.12);
+}
