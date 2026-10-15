@@ -236,9 +236,15 @@ function LandingPage({ onImport }) {
 
       <section className="archive-section archive-manifesto" id="archive">
         <div className="section-shell archive-manifesto-inner">
-          <div className="archive-manifesto-art" aria-hidden="true">
+          <div className="archive-manifesto-art">
+            <img
+              className="archive-theatre-image"
+              src="/images/archive-theatre.webp"
+              alt="An intimate boutique cinema with burgundy seats and a ceiling-mounted projector illuminating the screen."
+              loading="lazy"
+              decoding="async"
+            />
             <span className="archive-frame-number">CS / 002</span>
-            <span className="archive-aperture" />
             <span className="archive-frame-caption">NO BORROWED TASTE</span>
           </div>
           <div className="archive-manifesto-copy">
