@@ -518,3 +518,53 @@ a { color: inherit; text-decoration: none; }
   .binge-metrics { gap: 16px 10px; }
   .binge-metrics strong { font-size: 28px; }
 }
+
+/* Cinephile intermission: a quiet, film-inspired moment while real work continues. */
+.letterboxd-profile-link { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; opacity: .9; transition: opacity .2s, transform .2s; }
+.letterboxd-profile-link:hover { opacity: 1; transform: translateY(-2px); }
+.footer-letterboxd-link { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-soft); font: 10px var(--mono); letter-spacing: .03em; }
+.footer-letterboxd-link:hover { color: var(--ink); }
+.footer-motto { font: 25px/1.42 var(--serif); color: var(--ink-soft); margin: 26px 0 0; }
+.footer-motto em { font-size: 22px; color: var(--red-light); }
+.archive-manifesto-inner { display: grid; grid-template-columns: minmax(240px, .78fr) minmax(0, 1fr); gap: clamp(42px, 8vw, 112px); align-items: center; }
+.archive-manifesto-art { position: relative; min-height: 315px; border: 1px solid rgba(213,171,106,.28); background: radial-gradient(ellipse at 52% 45%, rgba(217,76,58,.22), transparent 43%), linear-gradient(145deg, #28231d, #171512 68%); display: grid; place-items: center; overflow: hidden; }
+.archive-manifesto-art::before, .archive-manifesto-art::after { content: ''; position: absolute; border: 1px solid rgba(213,171,106,.18); border-radius: 50%; }
+.archive-manifesto-art::before { width: 220px; height: 220px; }
+.archive-manifesto-art::after { width: 285px; height: 285px; border-style: dashed; opacity: .7; }
+.archive-frame-number, .archive-frame-caption { position: absolute; z-index: 1; color: var(--muted); font: 8px var(--mono); letter-spacing: .15em; }
+.archive-frame-number { top: 18px; left: 18px; }
+.archive-frame-caption { bottom: 18px; right: 18px; color: var(--brass); }
+.archive-aperture { width: 112px; height: 112px; border-radius: 50%; border: 1px solid rgba(213,171,106,.7); box-shadow: 0 0 0 13px rgba(213,171,106,.045), 0 0 0 27px rgba(213,171,106,.035), inset 0 0 45px rgba(217,76,58,.18); background: linear-gradient(145deg, rgba(217,76,58,.15), rgba(213,171,106,.04)); }
+.archive-manifesto-copy h2 { margin: 0; font: 500 clamp(40px, 5vw, 64px)/1.08 var(--serif); letter-spacing: -.05em; }
+.archive-manifesto-copy h2 em { color: var(--red-light); font-weight: 400; }
+.archive-manifesto-copy > p { max-width: 510px; margin: 22px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.95; }
+.archive-manifesto-copy .archive-bottom { margin-top: 32px; }
+.processing-cinema { text-align: center; }
+.intermission-art { width: min(100%, 380px); height: 175px; position: relative; margin: 3px auto 28px; overflow: hidden; border: 1px solid rgba(213,171,106,.18); background: radial-gradient(ellipse at 50% 50%, rgba(217,76,58,.11), transparent 56%), #171512; }
+.film-perforations { position: absolute; left: 0; right: 0; top: 9px; display: flex; justify-content: space-around; opacity: .5; }
+.film-perforations span { width: 14px; height: 8px; border: 1px solid rgba(213,171,106,.38); }
+.intermission-frame { position: absolute; width: 112px; height: 128px; top: 25px; border: 1px solid rgba(213,171,106,.3); background: linear-gradient(150deg, rgba(217,76,58,.15), rgba(213,171,106,.03)); }
+.intermission-frame-back { left: calc(50% - 78px); transform: rotate(-9deg) translateY(5px); opacity: .52; }
+.intermission-frame-front { left: calc(50% - 48px); overflow: hidden; animation: frame-float 5s ease-in-out infinite; box-shadow: 0 9px 25px rgba(0,0,0,.2); }
+.intermission-orbit { position: absolute; width: 76px; height: 76px; border-radius: 50%; border: 1px solid rgba(213,171,106,.72); left: 17px; top: 15px; box-shadow: 0 0 0 9px rgba(213,171,106,.035), 0 0 24px rgba(217,76,58,.12); }
+.intermission-light { position: absolute; width: 36px; height: 36px; border-radius: 50%; top: 35px; left: 37px; background: radial-gradient(circle at 35% 35%, #f1d4a0, #b9694e 75%); box-shadow: 0 0 30px rgba(217,76,58,.18); }
+.intermission-frame-mark { position: absolute; bottom: 7px; left: 0; right: 0; color: var(--ink-soft); font: 7px var(--mono); letter-spacing: .12em; }
+.intermission-caption { position: absolute; bottom: 10px; left: 12px; color: var(--muted); font: 7px var(--mono); letter-spacing: .14em; }
+@keyframes frame-float { 0%,100% { transform: translateY(0) rotate(3deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+.intermission-title { animation: intermission-copy-in .45s ease both; }
+@keyframes intermission-copy-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.intermission-note { min-height: 24px; }
+.intermission-stage { display: flex; justify-content: space-between; gap: 8px; margin: 24px 0 15px; padding: 13px 0; border-block: 1px solid var(--line-light); color: var(--muted); font: 8px var(--mono); letter-spacing: .06em; }
+.intermission-stage span { display: inline-flex; gap: 7px; align-items: center; }
+.intermission-stage i { font-style: normal; }
+.intermission-stage .stage-active { color: var(--brass); }
+.intermission-stage .stage-done { color: var(--red-light); }
+@media (max-width: 760px) {
+  .archive-manifesto-inner { grid-template-columns: 1fr; gap: 34px; }
+  .archive-manifesto-art { min-height: 230px; }
+  .archive-manifesto-copy .archive-bottom { align-items: flex-start; flex-direction: column; }
+  .intermission-art { height: 150px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intermission-frame-front, .intermission-title { animation: none !important; }
+}

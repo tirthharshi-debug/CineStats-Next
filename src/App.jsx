@@ -13,12 +13,13 @@ import {
 import { downloadReport, getJobProgress, getJobResults, uploadLetterboxdExport } from './api';
 
 const ease = [0.22, 1, 0.36, 1];
-const filmsToDiscover = [
-  { title: 'In the Mood for Love', year: '2000', director: 'Wong Kar-wai', mark: '01', tone: 'rose' },
-  { title: 'Perfect Days', year: '2023', director: 'Wim Wenders', mark: '02', tone: 'moss' },
-  { title: 'Aftersun', year: '2022', director: 'Charlotte Wells', mark: '03', tone: 'blue' },
-  { title: 'Chungking Express', year: '1994', director: 'Wong Kar-wai', mark: '04', tone: 'amber' },
-];
+function LetterboxdMark({ size = 22 }) {
+  return <svg viewBox="0 0 84 36" width={Math.round(size * 84 / 36)} height={size} fill="none" aria-hidden="true">
+    <circle cx="18" cy="18" r="16" fill="#ff8000" />
+    <circle cx="42" cy="18" r="16" fill="#00e054" />
+    <circle cx="66" cy="18" r="16" fill="#40bcf4" />
+  </svg>;
+}
 
 function Brand({ onClick }) {
   return (
@@ -41,6 +42,7 @@ function Header({ onImport, onHome, dashboard = false }) {
           <a href="#about" onClick={() => setMenuOpen(false)}>About</a>
         </nav>
         <div className="topbar-actions">
+          <a className="letterboxd-profile-link" href="https://boxd.it/8hpsV" target="_blank" rel="noreferrer" aria-label="My Letterboxd profile" title="Letterboxd"><LetterboxdMark size={22} /></a>
           <span className="edition-note"><span className="live-dot" /> MADE FOR FILM LOVERS</span>
           <button className="button button-small button-dark" onClick={onImport}>
             {dashboard ? 'Import another' : 'Open your archive'} <ArrowUpRight size={15} />
@@ -54,49 +56,25 @@ function Header({ onImport, onHome, dashboard = false }) {
   );
 }
 
-function PosterArtwork({ film, index }) {
-  return (
-    <div className={'poster-art poster-' + film.tone}>
-      <div className="poster-grain" />
-      <span className="poster-number">{film.mark}</span>
-      <div className="poster-graphic">
-        {index === 0 ? <><span className="orb orb-one" /><span className="orb orb-two" /><span className="poster-vertical">LOVE IS A MATTER OF TIMING</span></> : null}
-        {index === 1 ? <><span className="window-shape" /><span className="sun-shape" /><span className="poster-vertical">THE BEAUTY OF THE EVERYDAY</span></> : null}
-        {index === 2 ? <><span className="horizon-shape" /><span className="poster-sun" /><span className="poster-vertical">REMEMBER HOW IT FELT</span></> : null}
-        {index === 3 ? <><span className="neon-block" /><span className="neon-line" /><span className="poster-vertical">LOST IN THE CITY</span></> : null}
-      </div>
-      <div className="poster-caption">
-        <span className="poster-kicker">A FILM BY {film.director.toUpperCase()}</span>
-        <span className="poster-title">{film.title}</span>
-        <span className="poster-year">{film.year} · CINEMA FOREVER</span>
-      </div>
-    </div>
-  );
-}
-
-function FilmCard({ film, index }) {
-  return (
-    <article className="film-card">
-      <div className="film-art-wrap"><PosterArtwork film={film} index={index} /></div>
-      <div className="film-card-meta">
-        <div><h3>{film.title}</h3><p>{film.director}</p></div>
-        <span className="film-year">{film.year}</span>
-      </div>
-    </article>
-  );
-}
-
 function UploadModal({ onClose, onComplete }) {
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [phase, setPhase] = useState('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [jobProgress, setJobProgress] = useState({ status: 'idle', current: 0, total: 0 });
+  const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
   const cancelled = useRef(false);
 
   useEffect(() => () => { cancelled.current = true; }, []);
+
+  const working = phase === 'uploading' || phase === 'processing';
+  useEffect(() => {
+    if (!working) { setMessageIndex(0); return undefined; }
+    const interval = window.setInterval(() => setMessageIndex(index => (index + 1) % 6), 5200);
+    return () => window.clearInterval(interval);
+  }, [working]);
 
   const acceptFile = (candidate) => {
     setError('');
@@ -146,8 +124,16 @@ function UploadModal({ onClose, onComplete }) {
     }
   };
 
-  const working = phase === 'uploading' || phase === 'processing';
   const movieCount = jobProgress.total > 0 ? Math.min(100, Math.round((jobProgress.current / jobProgress.total) * 100)) : 0;
+  const intermissionMessages = [
+    { title: 'Every diary has an opening scene.', note: 'Preparing the frames that make up your film life.' },
+    { title: 'Finding the films you return to.', note: 'Reading your watch history and recorded rewatches.' },
+    { title: 'Looking for familiar names.', note: 'Matching titles and filmmakers where data is available.' },
+    { title: 'Following the thread through the years.', note: 'Organising your actual diary entries into a timeline.' },
+    { title: 'Making room for the unexpected.', note: 'Your patterns are emerging from the archive.' },
+    { title: 'A little patience between the frames.', note: 'Larger archives can take a little longer to read.' },
+  ];
+  const intermission = intermissionMessages[messageIndex];
 
   return (
     <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={event => { if (event.target === event.currentTarget && !working) onClose(); }}>
@@ -176,15 +162,21 @@ function UploadModal({ onClose, onComplete }) {
             <p className="privacy-note">Your export is processed by the configured CineStats API. Don't upload anything you don't want processed.</p>
           </>
         ) : (
-          <div className="processing-panel">
-            <div className="processing-reel"><LoaderCircle size={31} strokeWidth={1.3} /></div>
-            <span className="eyebrow">{phase === 'uploading' ? 'SENDING THE REEL' : 'IN THE CUTTING ROOM'}</span>
-            <h3>{phase === 'uploading' ? 'Getting your archive on screen.' : 'Finding the shape of your taste.'}</h3>
-            <p>{phase === 'uploading' ? 'Uploading your export to the configured API.' : jobProgress.status === 'enriching' ? 'Matching films, one frame at a time.' : 'Reading your diary and preparing your stats.'}</p>
+          <div className="processing-panel processing-cinema">
+            <div className="intermission-art" aria-hidden="true">
+              <div className="film-perforations"><span /><span /><span /><span /><span /><span /><span /><span /></div>
+              <div className="intermission-frame intermission-frame-back" />
+              <div className="intermission-frame intermission-frame-front"><span className="intermission-orbit" /><span className="intermission-light" /><span className="intermission-frame-mark">CS · 35MM</span></div>
+              <div className="intermission-caption">A PERSONAL CINEMATHEQUE</div>
+            </div>
+            <span className="eyebrow"><span className="live-dot" /> {phase === 'uploading' ? 'THE REEL IS ARRIVING' : jobProgress.status === 'enriching' ? 'IN THE CUTTING ROOM' : 'READING YOUR FILM DIARY'}</span>
+            <h3 key={phase === 'uploading' ? 'uploading' : messageIndex} className="intermission-title">{phase === 'uploading' ? 'Getting your archive on screen.' : intermission.title}</h3>
+            <p className="intermission-note">{phase === 'uploading' ? 'Sending your Letterboxd export to the analysis service.' : intermission.note}</p>
+            <div className="intermission-stage"><span className={phase === 'uploading' ? 'stage-active' : 'stage-done'}>01 <i>THE EXPORT</i></span><span className={phase === 'processing' ? 'stage-active' : ''}>02 <i>THE ARCHIVE</i></span><span>03 <i>THE REVEAL</i></span></div>
             <div className="progress-track"><span style={{ width: (phase === 'uploading' ? uploadProgress : movieCount) + '%' }} /></div>
             <div className="progress-label"><span>{phase === 'uploading' ? uploadProgress + '% uploaded' : (jobProgress.current + ' / ' + jobProgress.total + ' titles enriched')}</span><span>{phase === 'processing' && movieCount ? movieCount + '%' : ''}</span></div>
             {error ? <p className="form-error"><AlertCircle size={15} /> {error}</p> : null}
-            <button className="text-button" onClick={() => { cancelled.current = true; setPhase('idle'); setError('Processing stopped in this window. The server job may continue until it expires.'); }}>Stop waiting</button>
+            <button className="text-button" onClick={() => { cancelled.current = true; setPhase('idle'); setError('Processing stopped in this window. The server job may continue until it expires.'); }}>Stop waiting <ArrowRight size={14} /></button>
           </div>
         )}
       </motion.section>
@@ -231,11 +223,19 @@ function LandingPage({ onImport }) {
         </div>
       </section>
 
-      <section className="archive-section" id="archive">
-        <div className="section-shell">
-          <div className="archive-heading"><div><div className="section-marker"><span>02</span><span>A FEW FRAMES TO BEGIN</span></div><h2>For the love<br />of <em>the image.</em></h2></div><p className="archive-intro">Every collection is personal. Start with the films you have seen; let the patterns surprise you.</p></div>
-          <div className="film-grid">{filmsToDiscover.map((film, index) => <FilmCard key={film.title} film={film} index={index} />)}</div>
-          <div className="archive-bottom"><span><span className="small-dot" /> AN OPENING REEL, NOT YOUR DATA</span><button className="text-button" onClick={onImport}>Bring in your own films <ArrowRight size={15} /></button></div>
+      <section className="archive-section archive-manifesto" id="archive">
+        <div className="section-shell archive-manifesto-inner">
+          <div className="archive-manifesto-art" aria-hidden="true">
+            <span className="archive-frame-number">CS / 002</span>
+            <span className="archive-aperture" />
+            <span className="archive-frame-caption">NO BORROWED TASTE</span>
+          </div>
+          <div className="archive-manifesto-copy">
+            <div className="section-marker"><span>02</span><span>NO CANON. NO CHECKLIST.</span></div>
+            <h2>Your taste.<br /><em>Your own cut.</em></h2>
+            <p>We won't tell you what a cinephile should watch. No borrowed favourites, no prescribed canon. Bring your own diary, and let the films you've actually lived with tell the story.</p>
+            <div className="archive-bottom"><span><span className="small-dot" /> BUILT FROM YOUR LETTERBOXD EXPORT</span><button className="text-button" onClick={onImport}>Read my film diary <ArrowRight size={15} /></button></div>
+          </div>
         </div>
       </section>
 
@@ -570,9 +570,9 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
   };
   return (
     <main className="dashboard section-shell">
-      <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">An archive of the films you've met along the way. This is your viewing life, made visible.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
+      <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
       {downloadError ? <p className="form-error dashboard-error"><AlertCircle size={15} /> {downloadError}</p> : null}
-      <div className="dashboard-rule"><span>THE ARCHIVE AT A GLANCE</span><span>NOTHING HERE IS GUESSED</span></div>
+      <div className="dashboard-rule"><span>THE JOURNAL AT A GLANCE</span><span>NOTHING HERE IS GUESSED</span></div>
       <div className="metric-grid">
         <Metric label="Films in your archive" value={Number(basic.total_films || 0).toLocaleString()} note="Unique films watched" symbol={<Film size={15} />} />
         <Metric label="Screenings logged" value={Number(basic.total_diary_entries || 0).toLocaleString()} note="Diary entries, rewatches included" symbol={<CalendarDays size={15} />} />
@@ -610,8 +610,19 @@ function EmptyChart({ note }) {
 function Footer({ onImport, dashboard = false }) {
   return (
     <footer className="site-footer section-shell" id="about">
-      <div className="footer-top"><div><Brand onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} /><p className="footer-motto">For the films that made us.<br /><em>And the ones still waiting.</em></p></div><div className="footer-right"><span className="eyebrow">THE NEXT SCREENING</span><button className="text-button" onClick={onImport}>{dashboard ? 'Add to your archive' : 'Open your archive'} <ArrowUpRight size={15} /></button><a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">How to export Letterboxd <ArrowUpRight size={13} /></a><a href="https://github.com/tirthharshi-debug/CineStats-Next" target="_blank" rel="noreferrer"><Github size={14} /> Project on GitHub</a></div></div>
-      <div className="footer-bottom"><span>© 2026 CINESTATS NEXT · BUILT WITH FEELING</span><span>INDEPENDENT · UNOFFICIAL · FOR CINEPHILES</span></div>
+      <div className="footer-top">
+        <div className="footer-brand-block">
+          <Brand onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
+          <p className="footer-motto">Your personal<br /><em>cinematheque.</em></p>
+        </div>
+        <div className="footer-right">
+          <span className="eyebrow">THE NEXT SCREENING</span>
+          <button className="text-button" onClick={onImport}>{dashboard ? 'Add to your archive' : 'Open your archive'} <ArrowUpRight size={15} /></button>
+          <a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">How to export Letterboxd <ArrowUpRight size={13} /></a>
+          <a className="footer-letterboxd-link" href="https://boxd.it/8hpsV" target="_blank" rel="noreferrer" aria-label="My Letterboxd profile"><LetterboxdMark size={25} /><span>My Letterboxd</span><ArrowUpRight size={13} /></a>
+        </div>
+      </div>
+      <div className="footer-bottom"><span>© 2026 CINESTATS</span><span>INDEPENDENT · UNOFFICIAL · FOR CINEPHILES</span></div>
     </footer>
   );
 }
