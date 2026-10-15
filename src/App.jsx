@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays,
@@ -14,11 +14,22 @@ import { downloadReport, getJobProgress, getJobResults, uploadLetterboxdExport }
 
 const ease = [0.22, 1, 0.36, 1];
 function LetterboxdMark({ size = 22 }) {
-  return <svg viewBox="0 0 84 36" width={Math.round(size * 84 / 36)} height={size} fill="none" aria-hidden="true">
-    <circle cx="18" cy="18" r="16" fill="#ff8000" />
-    <circle cx="42" cy="18" r="16" fill="#00e054" />
-    <circle cx="66" cy="18" r="16" fill="#40bcf4" />
-  </svg>;
+  const id = useId().replace(/:/g, '-');
+  const clip1Id = `lb-clip-1-${id}`;
+  const clip2Id = `lb-clip-2-${id}`;
+  return (
+    <svg viewBox="0 0 84 36" width={Math.round(size * 84 / 36)} height={size} fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <clipPath id={clip1Id}><circle cx="18" cy="18" r="16" /></clipPath>
+        <clipPath id={clip2Id}><circle cx="42" cy="18" r="16" /></clipPath>
+      </defs>
+      <circle cx="18" cy="18" r="16" fill="#ff8000" />
+      <circle cx="42" cy="18" r="16" fill="#00e054" />
+      <circle cx="66" cy="18" r="16" fill="#40bcf4" />
+      <circle cx="42" cy="18" r="16" fill="#ffffff" clipPath={`url(#${clip1Id})`} />
+      <circle cx="66" cy="18" r="16" fill="#ffffff" clipPath={`url(#${clip2Id})`} />
+    </svg>
+  );
 }
 
 function Brand({ onClick }) {
@@ -42,7 +53,7 @@ function Header({ onImport, onHome, dashboard = false }) {
           <a href="#about" onClick={() => setMenuOpen(false)}>About</a>
         </nav>
         <div className="topbar-actions">
-          <a className="letterboxd-profile-link" href="https://boxd.it/8hpsV" target="_blank" rel="noreferrer" aria-label="My Letterboxd profile" title="Letterboxd"><LetterboxdMark size={22} /></a>
+          <a className="letterboxd-profile-link" href="https://boxd.it/8hpsV" target="_blank" rel="noopener noreferrer" aria-label="Letterboxd profile"><LetterboxdMark size={24} /></a>
           <span className="edition-note"><span className="live-dot" /> MADE FOR FILM LOVERS</span>
           <button className="button button-small button-dark" onClick={onImport}>
             {dashboard ? 'Import another' : 'Open your archive'} <ArrowUpRight size={15} />
@@ -619,7 +630,10 @@ function Footer({ onImport, dashboard = false }) {
           <span className="eyebrow">THE NEXT SCREENING</span>
           <button className="text-button" onClick={onImport}>{dashboard ? 'Add to your archive' : 'Open your archive'} <ArrowUpRight size={15} /></button>
           <a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">How to export Letterboxd <ArrowUpRight size={13} /></a>
-          <a className="footer-letterboxd-link" href="https://boxd.it/8hpsV" target="_blank" rel="noreferrer" aria-label="My Letterboxd profile"><LetterboxdMark size={25} /><span>My Letterboxd</span><ArrowUpRight size={13} /></a>
+          <div className="footer-socials" aria-label="Social links">
+            <a className="footer-social-link footer-letterboxd-link" href="https://boxd.it/8hpsV" target="_blank" rel="noopener noreferrer" aria-label="Letterboxd profile" title="Letterboxd"><LetterboxdMark size={24} /></a>
+            <a className="footer-social-link footer-github-link" href="https://github.com/tirthharshi-debug/CineStats-Next" target="_blank" rel="noopener noreferrer" aria-label="CineStats on GitHub" title="GitHub"><Github size={22} strokeWidth={1.8} /></a>
+          </div>
         </div>
       </div>
       <div className="footer-bottom"><span>© 2026 CINESTATS</span><span>INDEPENDENT · UNOFFICIAL · FOR CINEPHILES</span></div>
