@@ -541,9 +541,14 @@ a { color: inherit; text-decoration: none; }
 .intermission-caption span { color: var(--red-light); }
 @keyframes film-strip-travel { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes projector-sweep { from { opacity: .45; transform: translateX(-65%) rotate(-10deg); } to { opacity: 1; transform: translateX(-25%) rotate(-10deg); } }
-.dashboard-reveal { position: relative; isolation: isolate; transform-origin: 50% 0; }
-.dashboard-reveal-light { position: absolute; z-index: 4; pointer-events: none; top: 0; left: 0; right: 0; height: 150px; opacity: 0; background: linear-gradient(180deg, rgba(213,171,106,.11), transparent); animation: dashboard-light-reveal 1.15s ease-out .12s both; }
-@keyframes dashboard-light-reveal { 0% { opacity: 0; transform: translateY(-35px); } 35% { opacity: .8; } 100% { opacity: 0; transform: translateY(40px); } }
+.dashboard-reveal { position: relative; isolation: isolate; transform-origin: 50% 0; will-change: opacity, transform; }
+.dashboard-reveal-light { position: absolute; z-index: 4; pointer-events: none; top: 0; left: 0; right: 0; height: 230px; opacity: 0; background: linear-gradient(180deg, transparent, rgba(213,171,106,.19) 28%, rgba(217,76,58,.07) 52%, transparent 88%); animation: dashboard-light-reveal 2.1s cubic-bezier(.22,1,.36,1) .2s both; }
+.dashboard-reveal .dashboard-masthead { animation: dashboard-content-arrive .95s cubic-bezier(.22,1,.36,1) .12s both; }
+.dashboard-reveal .dashboard-rule { animation: dashboard-content-arrive .95s cubic-bezier(.22,1,.36,1) .28s both; }
+.dashboard-reveal .metric-grid { animation: dashboard-content-arrive 1.05s cubic-bezier(.22,1,.36,1) .42s both; }
+.dashboard-reveal .dash-section { animation: dashboard-content-arrive 1.05s cubic-bezier(.22,1,.36,1) .56s both; }
+@keyframes dashboard-content-arrive { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes dashboard-light-reveal { 0% { opacity: 0; transform: translateY(-90px); } 24% { opacity: .95; } 68% { opacity: .55; } 100% { opacity: 0; transform: translateY(175px); } }
 /* Cinephile intermission: a quiet, film-inspired moment while real work continues. */
 .letterboxd-profile-link { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; opacity: .92; transition: opacity .2s, transform .2s; }
 .letterboxd-profile-link:hover { opacity: 1; transform: translateY(-2px); }
@@ -623,5 +628,6 @@ a { color: inherit; text-decoration: none; }
   .projector-beam { width: 95px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .film-strip-track, .projector-beam, .dashboard-reveal-light { animation: none !important; }
+  .film-strip-track, .projector-beam, .dashboard-reveal-light, .dashboard-reveal .dashboard-masthead, .dashboard-reveal .dashboard-rule, .dashboard-reveal .metric-grid, .dashboard-reveal .dash-section { animation: none !important; }
+  .dashboard-reveal { will-change: auto; }
 }
