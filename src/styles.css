@@ -519,6 +519,31 @@ a { color: inherit; text-decoration: none; }
   .binge-metrics strong { font-size: 28px; }
 }
 
+/* Cinephile intermission: moving film strips while the real archive is processed. */
+.film-strip { position: absolute; left: -8%; width: 116%; height: 52px; overflow: hidden; background: rgba(7,7,7,.82); border-block: 5px solid #0a0908; box-shadow: 0 0 0 1px rgba(213,171,106,.12); }
+.film-strip-upper { top: 34px; transform: rotate(-5deg); }
+.film-strip-lower { top: 91px; transform: rotate(5deg); }
+.film-strip-track, .film-strip-run { display: flex; width: max-content; height: 100%; }
+.film-strip-track { animation: film-strip-travel 13s linear infinite; }
+.film-strip-lower .film-strip-track { animation-direction: reverse; animation-duration: 17s; }
+.film-strip-run { flex-shrink: 0; gap: 5px; padding-right: 5px; }
+.film-cell { position: relative; display: flex; flex: 0 0 69px; height: 100%; align-items: center; justify-content: center; border-inline: 1px solid rgba(213,171,106,.18); background: linear-gradient(135deg, rgba(217,76,58,.15), rgba(213,171,106,.045) 54%, rgba(20,19,17,.5)); }
+.film-cell::before, .film-cell::after { content: ''; position: absolute; left: 5px; right: 5px; height: 3px; background: repeating-linear-gradient(90deg, rgba(213,171,106,.5) 0 7px, transparent 7px 12px); }
+.film-cell::before { top: 1px; }
+.film-cell::after { bottom: 1px; }
+.film-cell i { color: rgba(213,171,106,.62); font: normal 7px var(--mono); position: absolute; top: 6px; left: 7px; }
+.film-cell b { width: 18px; height: 18px; border: 1px solid rgba(213,171,106,.45); border-radius: 50%; background: radial-gradient(circle at 38% 35%, rgba(241,212,160,.8), rgba(217,76,58,.22) 48%, transparent 72%); box-shadow: 0 0 13px rgba(217,76,58,.13); }
+.film-cell small { position: absolute; bottom: 5px; right: 6px; color: rgba(238,231,217,.42); font: 5px var(--mono); }
+.projector-beam { position: absolute; z-index: 2; top: -30px; bottom: -30px; left: 50%; width: 125px; transform: translateX(-50%) rotate(-10deg); background: linear-gradient(90deg, transparent, rgba(241,212,160,.025) 22%, rgba(241,212,160,.15) 50%, rgba(241,212,160,.025) 78%, transparent); filter: blur(8px); animation: projector-sweep 5.5s ease-in-out infinite alternate; pointer-events: none; }
+.projector-glint { position: absolute; z-index: 3; top: 50%; left: 50%; width: 6px; height: 6px; transform: translate(-50%,-50%); border-radius: 50%; background: #f1d4a0; box-shadow: 0 0 12px 4px rgba(241,212,160,.25), 0 0 32px 10px rgba(217,76,58,.15); }
+.intermission-art::after { content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .18; background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgba(238,231,217,.12) 4px, transparent 5px); mix-blend-mode: screen; }
+.intermission-caption { z-index: 5; left: 12px; bottom: 8px; display: flex; gap: 7px; align-items: center; }
+.intermission-caption span { color: var(--red-light); }
+@keyframes film-strip-travel { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes projector-sweep { from { opacity: .45; transform: translateX(-65%) rotate(-10deg); } to { opacity: 1; transform: translateX(-25%) rotate(-10deg); } }
+.dashboard-reveal { position: relative; isolation: isolate; transform-origin: 50% 0; }
+.dashboard-reveal-light { position: absolute; z-index: 4; pointer-events: none; top: 0; left: 0; right: 0; height: 150px; opacity: 0; background: linear-gradient(180deg, rgba(213,171,106,.11), transparent); animation: dashboard-light-reveal 1.15s ease-out .12s both; }
+@keyframes dashboard-light-reveal { 0% { opacity: 0; transform: translateY(-35px); } 35% { opacity: .8; } 100% { opacity: 0; transform: translateY(40px); } }
 /* Cinephile intermission: a quiet, film-inspired moment while real work continues. */
 .letterboxd-profile-link { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; opacity: .92; transition: opacity .2s, transform .2s; }
 .letterboxd-profile-link:hover { opacity: 1; transform: translateY(-2px); }
@@ -588,4 +613,15 @@ a { color: inherit; text-decoration: none; }
 .site-footer button:focus-visible svg {
   opacity: 1;
   filter: brightness(1.12);
+}
+
+@media (max-width: 760px) {
+  .film-strip-upper { top: 28px; }
+  .film-strip-lower { top: 78px; }
+  .film-strip { height: 46px; }
+  .film-cell { flex-basis: 60px; }
+  .projector-beam { width: 95px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-strip-track, .projector-beam, .dashboard-reveal-light { animation: none !important; }
 }
