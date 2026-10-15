@@ -175,10 +175,23 @@ function UploadModal({ onClose, onComplete }) {
         ) : (
           <div className="processing-panel processing-cinema">
             <div className="intermission-art" aria-hidden="true">
-              <div className="film-perforations"><span /><span /><span /><span /><span /><span /><span /><span /></div>
-              <div className="intermission-frame intermission-frame-back" />
-              <div className="intermission-frame intermission-frame-front"><span className="intermission-orbit" /><span className="intermission-light" /><span className="intermission-frame-mark">CS · 35MM</span></div>
-              <div className="intermission-caption">A PERSONAL CINEMATHEQUE</div>
+              <span className="projector-beam" />
+              <div className="film-strip film-strip-upper">
+                <div className="film-strip-track">
+                  {Array.from({ length: 2 }).map((_, reel) => <div className="film-strip-run" key={reel}>
+                    {['01', '02', '03', '04', '05', '06'].map(frame => <span className="film-cell" key={frame}><i>{frame}</i><b /><small>CS / 35</small></span>)}
+                  </div>)}
+                </div>
+              </div>
+              <div className="film-strip film-strip-lower">
+                <div className="film-strip-track">
+                  {Array.from({ length: 2 }).map((_, reel) => <div className="film-strip-run" key={reel}>
+                    {['07', '08', '09', '10', '11', '12'].map(frame => <span className="film-cell" key={frame}><i>{frame}</i><b /><small>CS / 35</small></span>)}
+                  </div>)}
+                </div>
+              </div>
+              <span className="projector-glint" />
+              <div className="intermission-caption">A PERSONAL CINEMATHEQUE <span>·</span> FRAMES IN MOTION</div>
             </div>
             <span className="eyebrow"><span className="live-dot" /> {phase === 'uploading' ? 'THE REEL IS ARRIVING' : jobProgress.status === 'enriching' ? 'IN THE CUTTING ROOM' : 'READING YOUR FILM DIARY'}</span>
             <h3 key={phase === 'uploading' ? 'uploading' : messageIndex} className="intermission-title">{phase === 'uploading' ? 'Getting your archive on screen.' : intermission.title}</h3>
@@ -672,7 +685,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header onImport={() => setShowImport(true)} onHome={goHome} dashboard={Boolean(dashboardData)} />
-      {dashboardData ? <AnalyticsDashboard data={dashboardData} jobId={jobId} onImport={() => setShowImport(true)} onHome={goHome} /> : <LandingPage onImport={() => setShowImport(true)} />}
+      {dashboardData ? <motion.div className="dashboard-reveal" initial={{ opacity: 0, y: 20, filter: 'blur(7px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 0.85, ease, filter: { duration: 0.7, ease } }}><span className="dashboard-reveal-light" aria-hidden="true" /><AnalyticsDashboard data={dashboardData} jobId={jobId} onImport={() => setShowImport(true)} onHome={goHome} /></motion.div> : <LandingPage onImport={() => setShowImport(true)} />}
       <Footer onImport={() => setShowImport(true)} dashboard={Boolean(dashboardData)} />
       <AnimatePresence>{showImport ? <UploadModal onClose={() => setShowImport(false)} onComplete={onComplete} /> : null}</AnimatePresence>
     </div>
