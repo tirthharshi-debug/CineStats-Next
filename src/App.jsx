@@ -685,7 +685,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header onImport={() => setShowImport(true)} onHome={goHome} dashboard={Boolean(dashboardData)} />
-      {dashboardData ? <motion.div className="dashboard-reveal" initial={{ opacity: 0, y: 20, filter: 'blur(7px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 0.85, ease, filter: { duration: 0.7, ease } }}><span className="dashboard-reveal-light" aria-hidden="true" /><AnalyticsDashboard data={dashboardData} jobId={jobId} onImport={() => setShowImport(true)} onHome={goHome} /></motion.div> : <LandingPage onImport={() => setShowImport(true)} />}
+      {dashboardData ? <motion.div className="dashboard-reveal" initial={{ opacity: 0, y: 34, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 1.65, ease: [0.16, 1, 0.3, 1], opacity: { duration: 1.15 }, scale: { duration: 1.65, ease: [0.16, 1, 0.3, 1] } }}><span className="dashboard-reveal-light" aria-hidden="true" /><AnalyticsDashboard data={dashboardData} jobId={jobId} onImport={() => setShowImport(true)} onHome={goHome} /></motion.div> : <LandingPage onImport={() => setShowImport(true)} />}
       <Footer onImport={() => setShowImport(true)} dashboard={Boolean(dashboardData)} />
       <AnimatePresence>{showImport ? <UploadModal onClose={() => setShowImport(false)} onComplete={onComplete} /> : null}</AnimatePresence>
     </div>
