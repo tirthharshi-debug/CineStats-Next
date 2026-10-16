@@ -34,20 +34,26 @@ function LetterboxdMark({ size = 22 }) {
 
 function ProjectorMark({ size = 40 }) {
   return (
-    <svg className="projector-mark" width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <svg className="projector-mark" width={size} height={size} viewBox="0 0 96 80" fill="none" aria-hidden="true">
       <g fill="currentColor">
-        <circle cx="22" cy="13" r="9" />
-        <circle cx="41" cy="10" r="7" />
+        <circle cx="30" cy="18" r="17" />
+        <circle cx="61" cy="13" r="13" />
       </g>
-      <g fill="#171512">
-        <circle cx="22" cy="13" r="3" />
-        <circle cx="41" cy="10" r="2.3" />
+      <g fill="#1c1c1c">
+        <circle cx="30" cy="18" r="6" />
+        <circle cx="61" cy="13" r="4.5" />
       </g>
-      <path d="M10 25h34v22H10z" fill="currentColor" />
-      <path d="M44 29l13-7v26l-13-7z" fill="#d94c3a" />
-      <path d="M17 48l-4 6h26l-4-6" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-      <path d="M17 40v-7m7 7V29m7 11V35" stroke="#171512" strokeWidth="3" strokeLinecap="square" />
-      <path d="M7 56h34" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity=".65" />
+      <g fill="#1c1c1c" opacity=".92">
+        <path d="M30 3l4 9-4 4-7-7zM45 18l-9 4-4-4 7-7zM30 33l-4-9 4-4 7 7zM15 18l9-4 4 4-7 7z" />
+        <path d="M61 2l3 7-3 3-6-5zM72 13l-7 3-3-3 5-5zM61 24l-3-7 3-3 5 5zM50 13l7-3 3 3-5 5z" />
+      </g>
+      <path d="M12 39Q12 35 16 35H61Q65 35 65 39V60H12Z" fill="currentColor" />
+      <path d="M65 42L82 33V62L65 54Z" fill="#a63232" />
+      <path d="M69 43L94 34V61L69 53Z" fill="#a63232" opacity=".32" />
+      <path d="M21 60L15 72H60L54 60" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M22 54V45M32 54V42M42 54V48" stroke="#1c1c1c" strokeWidth="5" strokeLinecap="square" />
+      <path d="M9 75H65" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity=".6" />
+      <circle cx="65" cy="48" r="3" fill="#fdfbf7" opacity=".9" />
     </svg>
   );
 }
