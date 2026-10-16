@@ -332,10 +332,11 @@ a { color: inherit; text-decoration: none; }
 .monthly-poster > span { color: var(--muted); font: 8px/1.4 var(--mono); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .mini-poster { flex-shrink: 0; overflow: hidden; position: relative; background: linear-gradient(150deg, #403327, #171614 72%); }
 .mini-poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.mini-poster-normal { width: 50px; height: 75px; }
-.mini-poster-shelf { width: 78px; height: 117px; }
-.mini-poster-comparison { width: 49px; height: 73px; }
-.mini-poster-decade { width: 38px; height: 57px; }
+.mini-poster-normal { width: 62px; height: 93px; }
+.mini-poster-shelf { width: 96px; height: 144px; }
+.mini-poster-comparison { width: 58px; height: 87px; }
+.mini-poster-decade { width: 44px; height: 66px; }
+.mini-poster-featured { width: 100%; height: 100%; }
 .poster-placeholder { width: 100%; height: 100%; display: grid; place-items: center; color: rgba(213,171,106,.7); }
 .decade-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; }
 .decade-card { min-width: 0; padding: 17px 15px 15px; border: 1px solid var(--line-light); background: linear-gradient(160deg, rgba(213,171,106,.045), transparent 58%), var(--bg-soft); }
@@ -629,4 +630,37 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .film-strip-track, .projector-beam, .dashboard-reveal-light, .dashboard-reveal .dashboard-masthead, .dashboard-reveal .dashboard-rule, .dashboard-reveal .metric-grid, .dashboard-reveal .dash-section { animation: none !important; }
   .dashboard-reveal { will-change: auto; }
+}
+
+/* Poster-led Top Four: give personal favourites the first visual word. */
+.top-four-section { padding: 74px 0 18px; border-bottom: 1px solid var(--line); }
+.top-four-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 27px; }
+.top-four-heading h2 { margin: 14px 0 10px; font: 500 clamp(36px, 4.2vw, 54px)/1.05 var(--serif); letter-spacing: -.045em; }
+.top-four-heading h2 em { color: var(--red-light); font-style: italic; }
+.top-four-heading p { max-width: 460px; margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.7; }
+.top-four-note { flex-shrink: 0; color: var(--muted); font: 8px var(--mono); letter-spacing: .13em; padding-bottom: 5px; }
+.top-four-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 18px; }
+.top-four-card { min-width: 0; }
+.top-four-art { position: relative; overflow: hidden; aspect-ratio: 2 / 3; background: #171512; border: 1px solid var(--line-light); }
+.top-four-art::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(15,14,13,.15), transparent 30%, transparent 66%, rgba(15,14,13,.58)); opacity: .85; transition: opacity .3s ease; }
+.top-four-art .mini-poster { width: 100%; height: 100%; transition: transform .45s cubic-bezier(.2,.7,.2,1), filter .35s ease; }
+.top-four-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.top-four-index { position: absolute; z-index: 2; top: 12px; left: 12px; color: #fdfbf7; font: 9px var(--mono); letter-spacing: .12em; text-shadow: 0 1px 8px rgba(0,0,0,.5); }
+.top-four-rating { position: absolute; z-index: 2; right: 11px; bottom: 11px; display: inline-flex; align-items: center; gap: 5px; color: #fdfbf7; font: 11px var(--mono); }
+.top-four-rating svg { color: var(--brass); }
+.top-four-copy { padding: 13px 1px 0; }
+.top-four-copy h3 { margin: 0; color: var(--ink); font: 500 clamp(16px, 1.45vw, 20px)/1.2 var(--serif); letter-spacing: -.025em; overflow-wrap: anywhere; }
+.top-four-copy > span { display: block; margin-top: 6px; color: var(--muted); font: 9px var(--mono); }
+.top-four-card:hover .top-four-art .mini-poster { transform: scale(1.035); filter: saturate(1.08) brightness(1.04); }
+.top-four-card:hover .top-four-art::after { opacity: 1; }
+@media (max-width: 760px) {
+  .top-four-section { padding-top: 55px; }
+  .top-four-heading { align-items: start; flex-direction: column; gap: 12px; }
+  .top-four-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px 14px; }
+  .top-four-copy h3 { font-size: 18px; }
+  .monthly-poster, .mini-poster-shelf { flex-basis: 78px; width: 78px; }
+  .mini-poster-shelf { height: 117px; }
+  .mini-poster-normal { width: 50px; height: 75px; }
+  .mini-poster-comparison { width: 48px; height: 72px; }
+  .mini-poster-decade { width: 38px; height: 57px; }
 }
