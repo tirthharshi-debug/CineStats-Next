@@ -603,6 +603,7 @@ def compute_community_comparison(enriched_movies: list[dict],
             if pd.notna(r):
                 user_ratings[title] = float(r)
 
+    top_rated = []
     for m in enriched_movies:
         tmdb = m.get("tmdb")
         if not tmdb:
@@ -611,6 +612,15 @@ def compute_community_comparison(enriched_movies: list[dict],
         user_r = user_ratings.get(title.strip().lower())
         if user_r is None:
             continue
+
+        film = {
+            "title": tmdb.get("title", title),
+            "year": tmdb.get("year"),
+            "poster_path": tmdb.get("poster_path"),
+            "user_rating": user_r,
+        }
+        top_rated.append(film)
+
         vote_avg = tmdb.get("vote_average")
         if vote_avg is None or vote_avg == 0:
             continue
@@ -619,10 +629,7 @@ def compute_community_comparison(enriched_movies: list[dict],
         diff = round(user_r - tmdb_r_5, 2)
 
         comparisons.append({
-            "title": tmdb.get("title", title),
-            "year": tmdb.get("year"),
-            "poster_path": tmdb.get("poster_path"),
-            "user_rating": user_r,
+            **film,
             "tmdb_rating": tmdb_r_5,
             "difference": diff,
         })
@@ -633,9 +640,12 @@ def compute_community_comparison(enriched_movies: list[dict],
     rated_lower = sorted([c for c in comparisons if c["difference"] < 0],
                          key=lambda x: x["difference"])[:10]
 
+    top_rated = sorted(top_rated, key=lambda x: (x["user_rating"], x.get("year") or 0), reverse=True)[:20]
+
     return {
         "rated_higher": rated_higher,
         "rated_lower": rated_lower,
+        "top_rated": top_rated,
     }
 
 
