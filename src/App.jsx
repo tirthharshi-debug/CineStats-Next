@@ -340,10 +340,11 @@ function RatingList({ title, data }) {
 function MiniPoster({ film, size = 'normal' }) {
   const [broken, setBroken] = useState(false);
   const path = film?.poster_path;
+  const imageSize = size === 'featured' ? 'w500' : 'w342';
   return (
     <div className={'mini-poster mini-poster-' + size}>
       {path && !broken
-        ? <img src={'https://image.tmdb.org/t/p/w342' + path} alt={film?.title || 'Film poster'} loading="lazy" onError={() => setBroken(true)} />
+        ? <img src={'https://image.tmdb.org/t/p/' + imageSize + path} alt={film?.title || 'Film poster'} loading="lazy" onError={() => setBroken(true)} />
         : <div className="poster-placeholder"><Film size={16} /></div>}
     </div>
   );
@@ -608,6 +609,18 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
         <Metric label="Your average rating" value={basic.average_rating ? Number(basic.average_rating).toFixed(2) + ' ★' : '—'} note="From your ratings" symbol={<Star size={15} />} />
         <Metric label="Longest streak" value={Number(pro.longest_watch_streak || 0) + ' days'} note="Consecutive days with a diary entry" symbol={<Clock3 size={15} />} />
       </div>
+      {(stats.community_comparison?.top_rated || []).length ? <section className="top-four-section">
+        <div className="top-four-heading">
+          <div><div className="section-marker"><span>00</span><span>THE FILMS YOU RATED HIGHEST</span></div><h2>Four that <em>stay with you.</em></h2><p>Your highest-rated films from the ratings in this export. Your taste, your call.</p></div>
+          <span className="top-four-note">PERSONAL FAVOURITES</span>
+        </div>
+        <div className="top-four-grid">
+          {stats.community_comparison.top_rated.slice(0, 4).map((film, index) => <article className="top-four-card" key={film.title + '-' + film.year}>
+            <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating"><Star size={12} fill="currentColor" /> {Number(film.user_rating).toFixed(1)}</span></div>
+            <div className="top-four-copy"><h3>{film.title}</h3><span>{film.year || 'Release year unknown'}</span></div>
+          </article>)}
+        </div>
+      </section> : null}
       <section className="dash-section">
         <div className="dash-section-title"><div><div className="section-marker"><span>01</span><span>THE PASSAGE OF TIME</span></div><h2>Your years <em>in film.</em></h2></div><span className="dash-count">{yearData.length} {yearData.length === 1 ? 'year' : 'years'} represented</span></div>
         <div className="chart-grid">
