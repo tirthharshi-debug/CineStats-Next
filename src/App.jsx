@@ -32,11 +32,31 @@ function LetterboxdMark({ size = 22 }) {
   );
 }
 
+function ProjectorMark({ size = 40 }) {
+  return (
+    <svg className="projector-mark" width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <g fill="currentColor">
+        <circle cx="22" cy="13" r="9" />
+        <circle cx="41" cy="10" r="7" />
+      </g>
+      <g fill="#171512">
+        <circle cx="22" cy="13" r="3" />
+        <circle cx="41" cy="10" r="2.3" />
+      </g>
+      <path d="M10 25h34v22H10z" fill="currentColor" />
+      <path d="M44 29l13-7v26l-13-7z" fill="#d94c3a" />
+      <path d="M17 48l-4 6h26l-4-6" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M17 40v-7m7 7V29m7 11V35" stroke="#171512" strokeWidth="3" strokeLinecap="square" />
+      <path d="M7 56h34" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity=".65" />
+    </svg>
+  );
+}
+
 function Brand({ onClick }) {
   return (
     <button className="brand" onClick={onClick} aria-label="CineStats home">
-      <span className="brand-mark"><Clapperboard size={21} strokeWidth={1.7} /></span>
-      <span className="brand-word">cine<span>stats</span><small>THE PERSONAL CINEMATHEQUE</small></span>
+      <span className="brand-mark"><ProjectorMark size={36} /></span>
+      <span className="brand-word">Cine<span>Stats</span><small>THE PERSONAL CINEMATHEQUE</small></span>
     </button>
   );
 }
