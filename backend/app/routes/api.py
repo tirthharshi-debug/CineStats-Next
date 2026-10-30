@@ -14,7 +14,7 @@ import time
 from app.services.file_service import (
     extract_zip, validate_letterboxd_export,
     parse_diary, parse_ratings, parse_watched,
-    parse_watchlist, parse_lists, get_unique_movies
+    parse_watchlist, parse_lists, get_unique_movies, parse_profile_favorites
 )
 from app.services.tmdb_service import TMDBService
 from app.services.stats_service import (
@@ -120,6 +120,7 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         watched_df = parse_watched(extract_path)
         watchlist_df = parse_watchlist(extract_path)
         lists_data = parse_lists(extract_path)
+        favorite_urls = parse_profile_favorites(extract_path)
 
         # 3. Compute basic + pro stats immediately (no TMDB needed)
         basic_stats = compute_basic_stats(diary_df, ratings_df, watched_df)
@@ -143,6 +144,7 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
 
         try:
             enriched = await tmdb_service.enrich_batch(unique_movies, update_progress)
+            favorite_films = await tmdb_service.enrich_favorite_films(favorite_urls)
         finally:
             await tmdb_service.close()
 
@@ -170,6 +172,7 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
                 "patron": patron_stats,
                 "advanced": advanced_stats,
                 "community_comparison": community_comparison,
+                "favorite_films": favorite_films,
                 "binge_stats": binge_stats,
                 "monthly_activity": monthly_activity,
                 "decade_leaderboard": decade_leaderboard,
