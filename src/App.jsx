@@ -609,15 +609,15 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
         <Metric label="Your average rating" value={basic.average_rating ? Number(basic.average_rating).toFixed(2) + ' ★' : '—'} note="From your ratings" symbol={<Star size={15} />} />
         <Metric label="Longest streak" value={Number(pro.longest_watch_streak || 0) + ' days'} note="Consecutive days with a diary entry" symbol={<Clock3 size={15} />} />
       </div>
-      {(stats.community_comparison?.top_rated || []).length ? <section className="top-four-section">
+      {(stats.favorite_films || []).length ? <section className="top-four-section">
         <div className="top-four-heading">
-          <div><div className="section-marker"><span>00</span><span>THE FILMS YOU RATED HIGHEST</span></div><h2>Four that <em>stay with you.</em></h2><p>Your highest-rated films from the ratings in this export. Your taste, your call.</p></div>
+          <div><div className="section-marker"><span>00</span><span>YOUR LETTERBOXD PROFILE FAVOURITES</span></div><h2>Four that <em>stay with you.</em></h2><p>The four films you chose for your profile, in your original order. Your taste, your call.</p></div>
           <span className="top-four-note">PERSONAL FAVOURITES</span>
         </div>
         <div className="top-four-grid">
-          {stats.community_comparison.top_rated.slice(0, 4).map((film, index) => <article className="top-four-card" key={film.title + '-' + film.year}>
-            <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating"><Star size={12} fill="currentColor" /> {Number(film.user_rating).toFixed(1)}</span></div>
-            <div className="top-four-copy"><h3>{film.title}</h3><span>{film.year || 'Release year unknown'}</span></div>
+          {stats.favorite_films.slice(0, 4).map((film, index) => <article className="top-four-card" key={film.favorite_url || (film.title + '-' + index)}>
+            <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating">{film.resolved ? 'FAVOURITE' : 'UNRESOLVED'}</span></div>
+            <div className="top-four-copy"><h3>{film.title || 'Favourite film'}</h3><span>{film.year || (film.resolved ? 'Release year unknown' : 'Film details unavailable')}</span></div>
           </article>)}
         </div>
       </section> : null}
