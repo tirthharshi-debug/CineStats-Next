@@ -515,8 +515,9 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
                 <div className="monthly-shelf-stats"><strong>{month.total_films}</strong><span>screenings</span><strong>{month.avg_rating ? Number(month.avg_rating).toFixed(1) + '★' : '—'}</strong><span>avg rating</span></div>
               </div>
               <div className="monthly-poster-row">
-                {(month.films || []).slice(0, 10).map((film, i) => <div className="monthly-poster" key={film.title + '-' + i} title={film.title}><MiniPoster film={film} size="shelf" /><span>{film.title}</span></div>)}
+                {(month.films || []).slice(0, 4).map((film, i) => <div className="monthly-poster" key={film.title + '-' + i} title={film.title}><MiniPoster film={film} size="shelf" /><span>{film.title}</span></div>)}
                 {!(month.films || []).length ? <p className="data-empty">No matched posters for this month yet.</p> : null}
+                {(month.films || []).length > 4 ? <div className="monthly-more"><span className="monthly-more-count">+{month.films.length - 4}</span><span>more screenings</span><small>Full month in your diary</small></div> : null}
               </div>
             </article>
           ))}
@@ -726,7 +727,7 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
         <div className="top-four-heading">
           <div><div className="section-marker"><span>00</span><span>YOUR LETTERBOXD PROFILE FAVOURITES</span></div><h2>Four that <em>stay with you.</em></h2><p>The four films you chose for your profile, in your original order. Your taste, your call.</p></div>
           <div className="top-four-heading-actions">
-            <span className="top-four-note">PERSONAL FAVOURITES</span>
+            <span className="top-four-note">YOUR PERSONAL CANON · FOUR FRAMES, FOREVER</span>
             <button className="button button-outline top-four-share" type="button" onClick={handleShareTopFour} disabled={sharingTopFour} aria-label="Download a shareable image of your Letterboxd Top Four">
               {sharingTopFour ? <LoaderCircle size={15} className="spin" /> : <Share2 size={15} />}
               {sharingTopFour ? 'Making card…' : 'Share my four'}
@@ -736,10 +737,11 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
         {shareError ? <p className="form-error top-four-share-error" role="status">{shareError}</p> : null}
         <div className="top-four-grid">
           {stats.favorite_films.slice(0, 4).map((film, index) => <article className="top-four-card" key={film.favorite_url || (film.title + '-' + index)}>
-            <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating">{film.resolved ? 'FAVOURITE' : 'UNRESOLVED'}</span></div>
-            <div className="top-four-copy"><h3>{film.title || 'Favourite film'}</h3><span>{film.year || (film.resolved ? 'Release year unknown' : 'Film details unavailable')}</span></div>
+            <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating">{film.resolved ? 'IN YOUR CANON' : 'UNRESOLVED'}</span><span className="top-four-frame-mark" aria-hidden="true">✳</span></div>
+            <div className="top-four-copy"><span className="top-four-position">FRAME 0{index + 1}</span><h3>{film.title || 'Favourite film'}</h3><span>{film.year || (film.resolved ? 'Release year unknown' : 'Film details unavailable')}</span></div>
           </article>)}
         </div>
+        <div className="top-four-footerline"><span>FOUR FILMS. A THOUSAND FEELINGS.</span><span>SELECTED BY YOU · NEVER RANKED BY AN ALGORITHM</span></div>
       </section> : null}
       <section className="dash-section">
         <div className="dash-section-title"><div><div className="section-marker"><span>01</span><span>THE PASSAGE OF TIME</span></div><h2>Your years <em>in film.</em></h2></div><span className="dash-count">{yearData.length} {yearData.length === 1 ? 'year' : 'years'} represented</span></div>
