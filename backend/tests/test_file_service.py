@@ -91,5 +91,25 @@ class ZipExtractionTests(unittest.TestCase):
                     shutil.rmtree(extracted, ignore_errors=True)
 
 
+class ProfileFavoritesTests(unittest.TestCase):
+    def test_parses_favorite_links_in_original_order(self):
+        favorites = [
+            "https://boxd.it/1uhM",
+            "https://boxd.it/2Oa4",
+            "https://boxd.it/2aq2",
+            "https://boxd.it/b8wK",
+        ]
+        profile_csv = 'Username,Favorite Films\n"example","' + ", ".join(favorites) + '"\n'
+
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "profile.csv"), "w", encoding="utf-8") as file:
+                file.write(profile_csv)
+            self.assertEqual(file_service.parse_profile_favorites(root), favorites)
+
+    def test_missing_profile_returns_empty_list(self):
+        with tempfile.TemporaryDirectory() as root:
+            self.assertEqual(file_service.parse_profile_favorites(root), [])
+
+
 if __name__ == "__main__":
     unittest.main()
