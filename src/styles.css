@@ -664,3 +664,24 @@ a { color: inherit; text-decoration: none; }
   .mini-poster-comparison { width: 48px; height: 72px; }
   .mini-poster-decade { width: 38px; height: 57px; }
 }
+
+/* Top Four: quiet gallery treatment and a share action that fits the existing system. */
+.top-four-heading-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 15px; flex-shrink: 0; }
+.top-four-share { min-height: 38px; gap: 9px; white-space: nowrap; }
+.top-four-share:disabled { cursor: wait; opacity: .72; }
+.top-four-share-error { margin: -8px 0 18px; }
+.top-four-art { isolation: isolate; }
+.top-four-art .mini-poster { position: relative; z-index: 0; }
+.top-four-card { transition: transform .35s cubic-bezier(.2,.7,.2,1); }
+.top-four-card:hover { transform: translateY(-3px); }
+.top-four-copy h3 { transition: color .25s ease; }
+.top-four-card:hover .top-four-copy h3 { color: var(--red-light); }
+.top-four-art:focus-within { outline: 1px solid var(--brass); outline-offset: 4px; }
+@media (max-width: 760px) {
+  .top-four-heading-actions { align-items: flex-start; width: 100%; flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+  .top-four-share { min-height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top-four-card, .top-four-copy h3 { transition: none !important; }
+  .top-four-card:hover { transform: none; }
+}
