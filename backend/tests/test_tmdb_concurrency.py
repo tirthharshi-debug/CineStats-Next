@@ -94,6 +94,90 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             tmdb_service._RATE_TOKENS = old_tokens
 
 
+    async def test_rate_limiter_spreads_request_starts_over_time(self):
+        old_tokens = tmdb_service._RATE_TOKENS
+        old_limit = tmdb_service.RATE_LIMIT_PER_WINDOW
+        tmdb_service.RATE_LIMIT_PER_WINDOW = 3
+        tmdb_service._RATE_TOKENS = asyncio.Semaphore(3)
+        starts = []
+
+        class FakeResponse:
+            status_code = 200
+            headers = {}
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeClient:
+            async def get(self, *_args, **_kwargs):
+                starts.append(asyncio.get_running_loop().time())
+                return FakeResponse()
+
+        try:
+            service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+            service.client = FakeClient()
+            service._request_count = 0
+            # A short test window makes the limiter observable without real API calls.
+            with patch.object(tmdb_service, "RATE_WINDOW", 0.03):
+                responses = await asyncio.gather(*(
+                    service._rate_limited_request(f"https://example.test/{i}", {})
+                    for i in range(10)
+                ))
+
+            self.assertEqual(len(responses), 10)
+            self.assertTrue(all(response == {"ok": True} for response in responses))
+            self.assertEqual(len(starts), 10)
+            # Three requests may start immediately; later requests must wait for
+            # rate tokens to be returned after the configured window.
+            self.assertGreaterEqual(max(starts) - min(starts), 0.045)
+        finally:
+            tmdb_service._RATE_TOKENS = old_tokens
+            tmdb_service.RATE_LIMIT_PER_WINDOW = old_limit
+
+    async def test_http_429_retries_after_retry_after_header(self):
+        old_tokens = tmdb_service._RATE_TOKENS
+        tmdb_service._RATE_TOKENS = asyncio.Semaphore(5)
+        calls = 0
+
+        class FakeResponse:
+            def __init__(self, status_code, headers=None):
+                self.status_code = status_code
+                self.headers = headers or {}
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    import httpx
+                    request = httpx.Request("GET", "https://example.test/resource")
+                    response = httpx.Response(self.status_code, request=request)
+                    raise httpx.HTTPStatusError("HTTP error", request=request, response=response)
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeClient:
+            async def get(self, *_args, **_kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return FakeResponse(429, {"Retry-After": "0"})
+                return FakeResponse(200)
+
+        try:
+            service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+            service.client = FakeClient()
+            service._request_count = 0
+            response = await service._rate_limited_request(
+                "https://example.test/resource", {}, retries=3
+            )
+            self.assertEqual(response, {"ok": True})
+            self.assertEqual(calls, 2)
+        finally:
+            tmdb_service._RATE_TOKENS = old_tokens
+
+
 class FavoriteRedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
     async def test_direct_letterboxd_url_is_parsed(self):
         service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
