@@ -81,6 +81,8 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             second = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
             first.client = FakeClient()
             second.client = FakeClient()
+            first._request_count = 0
+            second._request_count = 0
             with patch.object(tmdb_service, "RATE_WINDOW", 0.02):
                 responses = await asyncio.gather(
                     first._rate_limited_request("https://example.test/one", {}),
