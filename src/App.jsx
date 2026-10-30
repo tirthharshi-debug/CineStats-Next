@@ -94,7 +94,7 @@ function UploadModal({ onClose, onComplete }) {
       return;
     }
     if (candidate.size > 10 * 1024 * 1024) {
-      setError('This file is over 10 MB. The current API accepts exports up to 10 MB.');
+      setError('This file is over 10 MB. The current upload service accepts exports up to 10 MB.');
       return;
     }
     setFile(candidate);
@@ -118,7 +118,7 @@ function UploadModal({ onClose, onComplete }) {
         if (progress.status === 'error') throw new Error(progress.error || 'The analysis could not be completed.');
         if (progress.status === 'done') {
           const result = await getJobResults(started.job_id);
-          if (!result?.stats) throw new Error('The API returned no analytics data.');
+          if (!result?.stats) throw new Error('The CineStats analysis service returned no analytics data.');
           onComplete(result, started.job_id);
           return;
         }
@@ -169,7 +169,7 @@ function UploadModal({ onClose, onComplete }) {
             {error ? <p className="form-error"><AlertCircle size={15} /> {error}</p> : null}
             <div className="import-steps"><div><span>01</span><p>Export your data at <a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">Letterboxd ↗</a></p></div><div><span>02</span><p>Upload the original ZIP</p></div><div><span>03</span><p>Explore your film life</p></div></div>
             <button className="button button-primary button-wide" disabled={!file} onClick={processFile}>Read my film diary <ArrowRight size={17} /></button>
-            <p className="privacy-note">Your export is processed by the configured CineStats API. Don't upload anything you don't want processed.</p>
+            <p className="privacy-note">Your Letterboxd export is processed by CineStats. Film metadata, community ratings and poster artwork are enriched using the TMDB API. Don't upload anything you don't want processed.</p>
           </>
         ) : (
           <div className="processing-panel processing-cinema">
@@ -803,6 +803,10 @@ function Footer({ onImport, dashboard = false }) {
             <a className="footer-social-link footer-github-link" href="https://github.com/tirthharshi-debug/CineStats-Next" target="_blank" rel="noopener noreferrer" aria-label="CineStats on GitHub" title="GitHub"><Github size={22} strokeWidth={1.8} /></a>
           </div>
         </div>
+      </div>
+      <div className="tmdb-attribution" aria-label="TMDB attribution">
+        <p>Film metadata and poster images provided by <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB</a>.</p>
+        <p>This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org/about/logos-attribution" target="_blank" rel="noopener noreferrer">TMDB logo and attribution guidelines <ArrowUpRight size={12} /></a></p>
       </div>
       <div className="footer-bottom"><span>© 2026 CINESTATS</span><span>INDEPENDENT · UNOFFICIAL · FOR CINEPHILES</span></div>
     </footer>
