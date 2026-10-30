@@ -853,3 +853,69 @@ a { color: inherit; text-decoration: none; }
   .monthly-poster .mini-poster, .top-four-art .mini-poster-featured, .top-four-frame-mark { transition: none !important; }
   .monthly-poster:hover .mini-poster, .top-four-card:hover .top-four-art .mini-poster-featured { transform: none; }
 }
+
+
+/* Ratings Reveal: a compact, film-first reel that gives the numbers their own visual context. */
+.ratings-film-reel {
+  margin: 0 0 34px;
+  padding: clamp(18px, 3vw, 30px);
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(110,35,29,.15), transparent 46%),
+    linear-gradient(145deg, rgba(31,28,24,.96), rgba(18,17,15,.98));
+  border: 1px solid rgba(213,171,106,.18);
+  box-shadow: 0 20px 48px rgba(0,0,0,.16);
+}
+.ratings-film-reel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid rgba(213,171,106,.16);
+  color: var(--brass, #d5ab6a);
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  letter-spacing: .14em;
+  line-height: 1.6;
+}
+.ratings-film-reel-heading span:last-child { color: #8f8679; text-align: right; }
+.ratings-film-reel-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(12px, 2.2vw, 25px);
+}
+.ratings-film-card { min-width: 0; }
+.ratings-film-poster {
+  position: relative;
+  overflow: hidden;
+  padding: 6px;
+  background: linear-gradient(140deg, rgba(213,171,106,.2), rgba(213,171,106,.02) 42%, rgba(0,0,0,.35));
+  border: 1px solid rgba(213,171,106,.16);
+  box-shadow: 0 14px 32px rgba(0,0,0,.3);
+}
+.ratings-film-poster::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,.15), transparent 32%, transparent 60%, rgba(0,0,0,.35));
+}
+.ratings-film-poster .mini-poster-featured { transition: transform .4s ease, filter .4s ease; }
+.ratings-film-card:hover .ratings-film-poster .mini-poster-featured { transform: scale(1.025); filter: saturate(1.08); }
+.ratings-film-index, .ratings-film-score { position: absolute; z-index: 2; color: #f1e6d2; text-shadow: 0 2px 12px rgba(0,0,0,.85); }
+.ratings-film-index { top: 15px; left: 14px; font-family: var(--mono, monospace); font-size: 10px; letter-spacing: .12em; }
+.ratings-film-score { right: 12px; bottom: 13px; font-family: var(--mono, monospace); font-size: 12px; }
+.ratings-film-score i { color: var(--red-light, #ed725e); font-style: normal; }
+.ratings-film-copy { padding: 12px 2px 0; }
+.ratings-film-copy h3 { overflow-wrap: anywhere; font-family: var(--serif, Georgia, serif); font-size: clamp(14px, 1.45vw, 19px); line-height: 1.3; }
+.ratings-film-copy > span { display: block; margin-top: 5px; color: #a59b8c; font-size: 11px; }
+@media (max-width: 620px) {
+  .ratings-film-reel-heading { flex-direction: column; gap: 5px; }
+  .ratings-film-reel-heading span:last-child { text-align: left; }
+  .ratings-film-reel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ratings-film-poster .mini-poster-featured { transition: none !important; }
+  .ratings-film-card:hover .ratings-film-poster .mini-poster-featured { transform: none; }
+}
