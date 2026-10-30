@@ -609,7 +609,7 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
     try {
       const canvas = document.createElement('canvas');
       canvas.width = 1200;
-      canvas.height = 1500;
+      canvas.height = 1850;
       const context = canvas.getContext('2d');
       if (!context) throw new Error('Your browser could not prepare the share card.');
       context.fillStyle = '#141311';
@@ -633,7 +633,7 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
       const left = 76;
       const top = 326;
       const posterWidth = 500;
-      const posterHeight = 750;
+      const posterHeight = 630;
       const posterImages = await Promise.all(favourites.map(film => new Promise(resolve => {
         if (!film?.poster_path) return resolve(null);
         const image = new Image();
@@ -688,12 +688,12 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
 
       context.strokeStyle = 'rgba(213,171,106,0.25)';
       context.beginPath();
-      context.moveTo(76, 1430);
-      context.lineTo(1124, 1430);
+      context.moveTo(76, 1770);
+      context.lineTo(1124, 1770);
       context.stroke();
       context.fillStyle = '#9e988b';
       context.font = '16px monospace';
-      context.fillText('YOUR LETTERBOXD PROFILE FAVOURITES  ·  IN YOUR ORIGINAL ORDER', 76, 1465);
+      context.fillText('YOUR LETTERBOXD PROFILE FAVOURITES  ·  IN YOUR ORIGINAL ORDER', 76, 1805);
 
       const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('The share card could not be exported.')), 'image/png'));
       const url = window.URL.createObjectURL(blob);
