@@ -155,7 +155,7 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         advanced_stats = compute_advanced_stats(enriched, diary_df, ratings_df)
 
         # 7. New feature stats
-        community_comparison = compute_community_comparison(enriched, ratings_df)
+        community_comparison = compute_community_comparison(enriched, ratings_df, diary_df)
         binge_stats = compute_binge_stats(diary_df)
         monthly_activity = compute_monthly_activity(enriched, diary_df)
         decade_leaderboard = compute_decade_leaderboard(
