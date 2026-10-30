@@ -554,6 +554,15 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
 
       <section className="dash-section">
         <AnalyticsSectionHeading number="10" eyebrow="THE SMALL PRINT OF YOUR TASTE" title={<>What your ratings <em>reveal.</em></>} note="Descriptive, not definitive" />
+        {(community.top_rated || []).length ? <div className="ratings-film-reel">
+          <div className="ratings-film-reel-heading"><span>THE FILMS BEHIND YOUR SCORES</span><span>YOUR HIGHEST RATINGS · NOT YOUR PROFILE TOP FOUR</span></div>
+          <div className="ratings-film-reel-grid">
+            {community.top_rated.slice(0, 4).map((film, index) => <article className="ratings-film-card" key={(film.title || 'film') + '-' + index}>
+              <div className="ratings-film-poster"><MiniPoster film={film} size="featured" /><span className="ratings-film-index">0{index + 1}</span><span className="ratings-film-score">{Number(film.user_rating).toFixed(1)} <i>★</i></span></div>
+              <div className="ratings-film-copy"><h3>{film.title || 'Untitled film'}</h3><span>{film.year || 'Year unknown'}</span></div>
+            </article>)}
+          </div>
+        </div> : null}
         <div className="rich-grid rich-grid-two">
           <div className="data-panel">
             <div className="data-panel-title"><span>YOUR RATING TEMPERAMENT</span><span className="eyebrow">SELF-REPORTED RATINGS</span></div>
