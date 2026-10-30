@@ -601,21 +601,53 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
 
 def compute_community_comparison(enriched_movies: list[dict],
-                                  ratings_df: pd.DataFrame) -> dict:
-    """Compare user ratings vs TMDB community ratings (vote_average)."""
+                                  ratings_df: pd.DataFrame,
+                                  diary_df: pd.DataFrame | None = None) -> dict:
+    """Compare user ratings vs TMDB and surface the latest five-star diary films."""
     comparisons = []
     name_col = 'name' if 'name' in ratings_df.columns else 'title'
 
-    # Build lookup: title_lower -> user_rating
+    # Ratings.csv is canonical for the total number of unique five-star films.
     user_ratings = {}
+    five_star_titles = set()
     if not ratings_df.empty and 'rating' in ratings_df.columns:
         for _, row in ratings_df.iterrows():
             title = str(row.get(name_col, '')).strip().lower()
             r = row.get('rating')
             if pd.notna(r):
                 user_ratings[title] = float(r)
+                if float(r) == 5.0 and title:
+                    five_star_titles.add(title)
 
-    top_rated = []
+    # Diary entries are ordered by the date watched; deduplicate rewatches so
+    # this reel shows the four most recently watched distinct five-star films.
+    latest_five_star = []
+    if diary_df is not None and not diary_df.empty and 'watched_date' in diary_df.columns:
+        diary_name_col = 'name' if 'name' in diary_df.columns else 'title'
+        valid_diary = diary_df.dropna(subset=['watched_date']).sort_values('watched_date', ascending=False)
+        enriched_by_title = {
+            str(m.get('title', '')).strip().lower(): m.get('tmdb')
+            for m in enriched_movies if m.get('tmdb') and str(m.get('title', '')).strip()
+        }
+        seen_five_star = set()
+        for _, diary_row in valid_diary.iterrows():
+            diary_title = str(diary_row.get(diary_name_col, '')).strip()
+            title_key = diary_title.lower()
+            if not title_key or title_key in seen_five_star or user_ratings.get(title_key) != 5.0:
+                continue
+            seen_five_star.add(title_key)
+            tmdb = enriched_by_title.get(title_key) or {}
+            latest_five_star.append({
+                "title": tmdb.get("title", diary_title),
+                "year": tmdb.get("year", diary_row.get("year")),
+                "poster_path": tmdb.get("poster_path"),
+                "user_rating": 5.0,
+                "watched_date": str(diary_row['watched_date'].date()) if hasattr(diary_row['watched_date'], 'date') else str(diary_row['watched_date']),
+            })
+            if len(latest_five_star) == 4:
+                break
+
+    top_rated = [];
     for m in enriched_movies:
         tmdb = m.get("tmdb")
         if not tmdb:
@@ -658,6 +690,8 @@ def compute_community_comparison(enriched_movies: list[dict],
         "rated_higher": rated_higher,
         "rated_lower": rated_lower,
         "top_rated": top_rated,
+        "latest_five_star": latest_five_star,
+        "five_star_count": len(five_star_titles),
     }
 
 
