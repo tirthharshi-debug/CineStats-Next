@@ -130,10 +130,27 @@ class TMDBService:
         replaced with an unrelated highly-rated film.
         """
         from html import unescape
-        from urllib.parse import urlparse
+        from urllib.parse import urljoin, urlparse
 
         results = []
         allowed_hosts = {"boxd.it", "www.boxd.it", "letterboxd.com", "www.letterboxd.com"}
+        final_hosts = {"letterboxd.com", "www.letterboxd.com"}
+        max_redirects = 5
+
+        def is_allowed_url(url: str) -> bool:
+            """Allow only HTTPS URLs on known Letterboxd hosts, using the default port."""
+            try:
+                parsed = urlparse(url)
+                return (
+                    parsed.scheme == "https"
+                    and parsed.hostname in allowed_hosts
+                    and parsed.username is None
+                    and parsed.password is None
+                    and parsed.port in (None, 443)
+                )
+            except ValueError:
+                # urlparse can raise for malformed ports or bracketed hosts.
+                return False
 
         for index, favorite_url in enumerate(favorite_urls):
             item = {
@@ -146,20 +163,39 @@ class TMDBService:
                 "tmdb_id": None,
             }
             try:
-                parsed_input = urlparse(favorite_url)
-                if parsed_input.scheme != "https" or parsed_input.hostname not in allowed_hosts:
+                current_url = favorite_url
+                if not is_allowed_url(current_url):
                     results.append(item)
                     continue
 
-                response = await self.client.get(
-                    favorite_url,
-                    follow_redirects=True,
-                    headers={"User-Agent": "CineStats/1.0 (Letterboxd favourites import)"},
-                    timeout=15.0,
-                )
+                response = None
+                for redirect_count in range(max_redirects + 1):
+                    # Never let the HTTP client follow redirects automatically:
+                    # each Location is validated before the next network request.
+                    response = await self.client.get(
+                        current_url,
+                        follow_redirects=False,
+                        headers={"User-Agent": "CineStats/1.0 (Letterboxd favourites import)"},
+                        timeout=15.0,
+                    )
+                    if response.status_code not in (301, 302, 303, 307, 308):
+                        break
+                    location = response.headers.get("Location")
+                    if not location or redirect_count >= max_redirects:
+                        response = None
+                        break
+                    next_url = urljoin(current_url, location)
+                    if not is_allowed_url(next_url):
+                        response = None
+                        break
+                    current_url = next_url
+
+                if response is None:
+                    results.append(item)
+                    continue
                 response.raise_for_status()
-                final_url = urlparse(str(response.url))
-                if final_url.hostname not in {"letterboxd.com", "www.letterboxd.com"}:
+                final_url = urlparse(current_url)
+                if final_url.hostname not in final_hosts:
                     results.append(item)
                     continue
 
