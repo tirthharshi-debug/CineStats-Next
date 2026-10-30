@@ -22,7 +22,7 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 # Shared across all TMDBService instances in this process. Multiple OS processes
 # or containers require a shared limiter (for example Redis) for global limits.
 CONCURRENCY = 20
-RATE_LIMIT_PER_WINDOW = 20
+RATE_LIMIT_PER_WINDOW = 30
 RATE_WINDOW = 1.0
 
 _REQUEST_SEMAPHORE = asyncio.Semaphore(CONCURRENCY)
