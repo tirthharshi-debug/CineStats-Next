@@ -94,5 +94,112 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             tmdb_service._RATE_TOKENS = old_tokens
 
 
+class FavoriteRedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_letterboxd_url_is_parsed(self):
+        service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+        calls = []
+
+        class FakeResponse:
+            status_code = 200
+            headers = {}
+            text = '<html><title>Arrival (2016) — Letterboxd</title></html>'
+            url = "https://letterboxd.com/film/arrival/"
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            async def get(self, url, **kwargs):
+                calls.append((url, kwargs))
+                return FakeResponse()
+
+        service.client = FakeClient()
+        async def fake_enrich(title, year):
+            return {"title": title, "year": year, "tmdb_id": 1, "poster_path": None}
+        service.enrich_movie = fake_enrich
+
+        results = await service.enrich_favorite_films(["https://letterboxd.com/film/arrival/"])
+        self.assertTrue(results[0]["resolved"])
+        self.assertEqual(results[0]["title"], "Arrival")
+        self.assertEqual(results[0]["year"], 2016)
+        self.assertFalse(calls[0][1]["follow_redirects"])
+
+    async def test_short_link_redirect_to_letterboxd_is_allowed(self):
+        service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+        calls = []
+
+        class FakeResponse:
+            def __init__(self, status_code, headers=None, text=""):
+                self.status_code = status_code
+                self.headers = headers or {}
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            async def get(self, url, **kwargs):
+                calls.append(url)
+                if url == "https://boxd.it/abc":
+                    return FakeResponse(302, {"Location": "https://letterboxd.com/film/arrival/"})
+                return FakeResponse(200, text="<title>Arrival (2016) — Letterboxd</title>")
+
+        service.client = FakeClient()
+        async def fake_enrich(title, year):
+            return {"title": title, "year": year, "tmdb_id": 1, "poster_path": None}
+        service.enrich_movie = fake_enrich
+
+        results = await service.enrich_favorite_films(["https://boxd.it/abc"])
+        self.assertTrue(results[0]["resolved"])
+        self.assertEqual(calls, [
+            "https://boxd.it/abc",
+            "https://letterboxd.com/film/arrival/",
+        ])
+
+    async def test_unsafe_redirect_target_is_never_requested(self):
+        service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+        calls = []
+
+        class FakeResponse:
+            status_code = 302
+            headers = {"Location": "http://127.0.0.1/admin"}
+            text = ""
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            async def get(self, url, **kwargs):
+                calls.append(url)
+                return FakeResponse()
+
+        service.client = FakeClient()
+        results = await service.enrich_favorite_films(["https://boxd.it/abc"])
+        self.assertFalse(results[0]["resolved"])
+        self.assertEqual(calls, ["https://boxd.it/abc"])
+
+    async def test_untrusted_redirect_host_is_never_requested(self):
+        service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+        calls = []
+
+        class FakeResponse:
+            status_code = 302
+            headers = {"Location": "https://evil.example/steal"}
+            text = ""
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            async def get(self, url, **kwargs):
+                calls.append(url)
+                return FakeResponse()
+
+        service.client = FakeClient()
+        results = await service.enrich_favorite_films(["https://boxd.it/abc"])
+        self.assertFalse(results[0]["resolved"])
+        self.assertEqual(calls, ["https://boxd.it/abc"])
+
+
 if __name__ == "__main__":
     unittest.main()
