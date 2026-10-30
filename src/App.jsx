@@ -578,7 +578,12 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
           </div>
           <div className="data-panel">
             <div className="data-panel-title"><span>THE YEARS ON THE TICKET</span><span className="eyebrow">RELEASE-YEAR REFLECTION</span></div>
-            <div className="release-pair"><div><span>Average release year</span><strong>{advanced.average_release_year || '—'}</strong></div><div><span>Oldest matched film</span><strong>{advanced.oldest_film?.title || '—'}</strong><small>{advanced.oldest_film?.year || ''}</small></div><div><span>Newest matched film</span><strong>{advanced.newest_film?.title || '—'}</strong><small>{advanced.newest_film?.year || ''}</small></div><div><span>Most rewatched</span><strong>{advanced.most_rewatched_film?.title || '—'}</strong><small>{advanced.most_rewatched_film ? advanced.most_rewatched_film.rewatch_count + ' rewatch entries' : ''}</small></div></div>
+            <div className="release-pair">
+              <div className="release-stat-average"><span>Average release year</span><strong>{advanced.average_release_year || '—'}</strong></div>
+              <div className="release-stat-film"><span className="release-stat-label">Oldest matched film</span><div className="release-stat-content">{advanced.oldest_film?.poster_path ? <MiniPoster film={advanced.oldest_film} size="shelf" /> : null}<div><strong>{advanced.oldest_film?.title || '—'}</strong><small>{advanced.oldest_film?.year || ''}</small></div></div></div>
+              <div className="release-stat-film"><span className="release-stat-label">Newest matched film</span><div className="release-stat-content">{advanced.newest_film?.poster_path ? <MiniPoster film={advanced.newest_film} size="shelf" /> : null}<div><strong>{advanced.newest_film?.title || '—'}</strong><small>{advanced.newest_film?.year || ''}</small></div></div></div>
+              <div className="release-stat-film"><span className="release-stat-label">Most rewatched</span><div className="release-stat-content">{advanced.most_rewatched_film?.poster_path ? <MiniPoster film={advanced.most_rewatched_film} size="shelf" /> : null}<div><strong>{advanced.most_rewatched_film?.title || '—'}</strong><small>{advanced.most_rewatched_film ? advanced.most_rewatched_film.rewatch_count + ' rewatch entries' : ''}</small></div></div></div>
+            </div>
             {advanced.correlation_insight ? <p className="editorial-note">{advanced.correlation_insight} <span className="correlation-stat">Correlation: {advanced.release_year_rating_correlation ?? 'not enough data'}</span></p> : null}
           </div>
         </div>
