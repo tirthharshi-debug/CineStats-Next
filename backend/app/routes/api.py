@@ -35,7 +35,9 @@ _jobs: dict[str, dict] = {}
 _CLEANUP_INTERVAL = 600   # 10 minutes
 _JOB_TTL = 1800           # 30 minutes after completion
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB compressed upload limit
-MAX_ACTIVE_JOBS = 2  # keep concurrent analysis bounded on small instances
+MAX_ACCEPTED_JOBS = 4  # at most 4 queued/running jobs per process
+_admission_lock = asyncio.Lock()
+_accepted_jobs = 0
 
 
 def _new_job() -> tuple[str, dict]:
@@ -62,13 +64,6 @@ def _get_job(job_id: str) -> dict:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
-
-
-def _latest_job() -> dict | None:
-    """Return the most recently created job, or None."""
-    if not _jobs:
-        return None
-    return _jobs[max(_jobs, key=lambda k: _jobs[k]["created_at"])]
 
 
 async def _cleanup_old_jobs():
@@ -202,9 +197,12 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         traceback.print_exc()
 
     finally:
-        # Clean up extracted files to prevent disk usage growth
+        # Clean up extracted files and release this process's admission slot.
         if extract_path and os.path.isdir(extract_path):
             shutil.rmtree(extract_path, ignore_errors=True)
+        global _accepted_jobs
+        async with _admission_lock:
+            _accepted_jobs = max(0, _accepted_jobs - 1)
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -221,40 +219,48 @@ async def upload_zip(file: UploadFile = File(...)):
         await file.close()
         raise HTTPException(status_code=400, detail="Please upload a .zip file exported from Letterboxd")
 
-    active_statuses = {"idle", "extracting", "parsing", "enriching", "computing"}
-    if sum(job["status"] in active_statuses for job in _jobs.values()) >= MAX_ACTIVE_JOBS:
-        await file.close()
-        raise HTTPException(status_code=429, detail="CineStats is processing other archives. Please try again shortly.")
+    # Reserve capacity atomically before buffering the upload. This bounds memory
+    # usage and prevents simultaneous requests from all passing a racy check.
+    global _accepted_jobs
+    async with _admission_lock:
+        if _accepted_jobs >= MAX_ACCEPTED_JOBS:
+            await file.close()
+            raise HTTPException(
+                status_code=429,
+                detail="CineStats is at capacity. Please try again shortly.",
+                headers={"Retry-After": "15"},
+            )
+        _accepted_jobs += 1
 
-    # Read in chunks and always close the upload. Create the job only after
-    # validation so oversized uploads cannot leave orphaned idle jobs behind.
-    chunks = []
-    total_size = 0
     try:
-        while True:
-            chunk = await file.read(1024 * 1024)  # 1 MB chunks
-            if not chunk:
-                break
-            total_size += len(chunk)
-            if total_size > MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail="CineStats currently supports Letterboxd exports up to 10 MB.",
-                )
-            chunks.append(chunk)
-    finally:
-        await file.close()
+        chunks = []
+        total_size = 0
+        try:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="CineStats currently supports Letterboxd exports up to 10 MB.",
+                    )
+                chunks.append(chunk)
+        finally:
+            await file.close()
 
-    contents = b"".join(chunks)
-    # Re-check after reading to close the race between simultaneous uploads.
-    if sum(job["status"] in active_statuses for job in _jobs.values()) >= MAX_ACTIVE_JOBS:
-        raise HTTPException(status_code=429, detail="CineStats is processing other archives. Please try again shortly.")
-
-    job_id, job = _new_job()
-    _ensure_cleanup_started()
-    asyncio.create_task(_process_in_background(job_id, contents))
-
-    return {"success": True, "message": "Processing started", "job_id": job_id}
+        contents = b"".join(chunks)
+        job_id, job = _new_job()
+        _ensure_cleanup_started()
+        asyncio.create_task(_process_in_background(job_id, contents))
+        return {"success": True, "message": "Processing started", "job_id": job_id}
+    except Exception:
+        # If no background job owns the reservation, release it here.
+        if "job_id" not in locals():
+            async with _admission_lock:
+                _accepted_jobs = max(0, _accepted_jobs - 1)
+        raise
 
 
 @router.get("/progress/{job_id}")
@@ -304,60 +310,8 @@ async def export_pdf_by_id(job_id: str):
     )
 
 
-# ─── Backward-compatible shim endpoints (no job_id) ─────────────────────────
-# These find the most recent job so the app works even without frontend changes.
-
-
-@router.get("/progress")
-async def get_progress():
-    """Get progress for the most recent job (backward compat)."""
-    job = _latest_job()
-    if not job:
-        return {"status": "idle", "current": 0, "total": 0}
-    resp = {
-        "status": job["status"],
-        "current": job["current"],
-        "total": job["total"],
-    }
-    if job["error"]:
-        resp["error"] = job["error"]
-    if job["basic_stats"]:
-        resp["basic_stats"] = job["basic_stats"]
-    if job["pro_stats"]:
-        resp["pro_stats"] = job["pro_stats"]
-    return resp
-
-
-@router.get("/results")
-async def get_results():
-    """Fetch results for the most recent job (backward compat)."""
-    job = _latest_job()
-    if not job:
-        raise HTTPException(status_code=400, detail="No processing has been started")
-    if job["status"] == "done" and job["result"]:
-        return job["result"]
-    elif job["status"] == "error":
-        raise HTTPException(status_code=500, detail=job.get("error", "Processing failed"))
-    else:
-        raise HTTPException(status_code=202, detail="Still processing")
-
-
-@router.get("/export/pdf")
-async def export_pdf():
-    """Generate PDF for the most recent job (backward compat)."""
-    job = _latest_job()
-    if not job or job["status"] != "done" or not job["result"]:
-        raise HTTPException(status_code=400, detail="No analysis data available. Upload and process a file first.")
-
-    from app.services.export_service import generate_pdf
-    pdf_buffer = generate_pdf(job["result"])
-
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=CineStats_Report.pdf"}
-    )
-
+# Legacy endpoints without a job ID were removed because they could return
+# another user's most recently created job. Clients must use per-job routes.
 
 @router.get("/cache-stats")
 async def get_cache_stats():
