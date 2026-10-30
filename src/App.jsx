@@ -169,7 +169,7 @@ function UploadModal({ onClose, onComplete }) {
             {error ? <p className="form-error"><AlertCircle size={15} /> {error}</p> : null}
             <div className="import-steps"><div><span>01</span><p>Export your data at <a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">Letterboxd ↗</a></p></div><div><span>02</span><p>Upload the original ZIP</p></div><div><span>03</span><p>Explore your film life</p></div></div>
             <button className="button button-primary button-wide" disabled={!file} onClick={processFile}>Read my film diary <ArrowRight size={17} /></button>
-            <p className="privacy-note">Your Letterboxd export is processed by CineStats. Film metadata, community ratings and poster artwork are enriched using the TMDB API. Don't upload anything you don't want processed.</p>
+            <p className="privacy-note">Your Letterboxd export is processed by CineStats. Matched films are enriched with metadata, community ratings and poster artwork using the <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB API</a>. Don't upload anything you don't want processed.</p>
           </>
         ) : (
           <div className="processing-panel processing-cinema">
