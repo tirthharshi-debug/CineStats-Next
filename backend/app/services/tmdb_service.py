@@ -3,7 +3,7 @@ TMDB API service — search, fetch details, cache integration.
 
 Concurrent enrichment: movies are processed in parallel using asyncio.gather,
 controlled by a concurrency semaphore and a sliding-window rate limiter that
-guarantees at most RATE_LIMIT_PER_WINDOW API requests in any 10-second window.
+limits request starts to approximately RATE_LIMIT_PER_WINDOW per RATE_WINDOW-second interval.
 """
 import httpx
 import asyncio
