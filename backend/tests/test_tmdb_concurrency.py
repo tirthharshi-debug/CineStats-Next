@@ -126,6 +126,8 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
                     service._rate_limited_request(f"https://example.test/{i}", {})
                     for i in range(10)
                 ))
+                # Let scheduled token-release tasks finish before restoring globals.
+                await asyncio.sleep(0.04)
 
             self.assertEqual(len(responses), 10)
             self.assertTrue(all(response == {"ok": True} for response in responses))
@@ -169,9 +171,12 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
             service.client = FakeClient()
             service._request_count = 0
-            response = await service._rate_limited_request(
-                "https://example.test/resource", {}, retries=3
-            )
+            with patch.object(tmdb_service, "RATE_WINDOW", 0.01):
+                response = await service._rate_limited_request(
+                    "https://example.test/resource", {}, retries=3
+                )
+                # Avoid leaving background token-release tasks using restored globals.
+                await asyncio.sleep(0.02)
             self.assertEqual(response, {"ok": True})
             self.assertEqual(calls, 2)
         finally:
