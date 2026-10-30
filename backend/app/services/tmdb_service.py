@@ -18,13 +18,15 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
-# ─── Concurrency & rate-limit configuration ───
-# TMDB's legacy 40-req/10s limit was removed in 2019.
-# Current soft limits: ~40 requests/second, ~20 simultaneous connections per IP.
-# We target half the request limit for safe headroom.
-CONCURRENCY = 20               # max movies being enriched at the same time
-RATE_LIMIT_PER_WINDOW = 20     # max API requests per sliding window
-RATE_WINDOW = 1.0              # window size in seconds
+# ─── Process-wide concurrency & rate-limit configuration ───
+# Shared across all TMDBService instances in this process. Multiple OS processes
+# or containers require a shared limiter (for example Redis) for global limits.
+CONCURRENCY = 20
+RATE_LIMIT_PER_WINDOW = 20
+RATE_WINDOW = 1.0
+
+_REQUEST_SEMAPHORE = asyncio.Semaphore(CONCURRENCY)
+_RATE_TOKENS = asyncio.Semaphore(RATE_LIMIT_PER_WINDOW)
 
 
 class TMDBService:
@@ -38,13 +40,7 @@ class TMDBService:
         )
         self._request_count = 0
 
-        # Concurrency gate: at most CONCURRENCY movies enriched at once
-        self._semaphore = asyncio.Semaphore(CONCURRENCY)
-
-        # Sliding-window rate limiter: at most RATE_LIMIT_PER_WINDOW API
-        # requests in any RATE_WINDOW-second period.  Each request acquires a
-        # token; a background task releases it after RATE_WINDOW seconds.
-        self._rate_tokens = asyncio.Semaphore(RATE_LIMIT_PER_WINDOW)
+        # Module-level gates ensure separate jobs share this process's capacity.
 
     async def close(self):
         await self.client.aclose()
@@ -52,14 +48,14 @@ class TMDBService:
     async def _release_rate_token(self):
         """Release a rate-limit token after the window elapses."""
         await asyncio.sleep(RATE_WINDOW)
-        self._rate_tokens.release()
+        _RATE_TOKENS.release()
 
     async def _rate_limited_request(self, url: str, params: dict, retries: int = 3) -> dict | None:
         """Make a rate-limited request with retry logic."""
         for attempt in range(retries):
             try:
                 # Acquire a rate-limit token (blocks if window is full)
-                await self._rate_tokens.acquire()
+                await _RATE_TOKENS.acquire()
                 asyncio.create_task(self._release_rate_token())
 
                 response = await self.client.get(url, params=params)
@@ -300,7 +296,7 @@ class TMDBService:
 
         async def _enrich_one(index: int, movie: dict):
             nonlocal _completed
-            async with self._semaphore:
+            async with _REQUEST_SEMAPHORE:
                 enriched = await self.enrich_movie(movie["title"], movie.get("year"))
                 results[index] = {**movie, "tmdb": enriched}
                 async with _progress_lock:
