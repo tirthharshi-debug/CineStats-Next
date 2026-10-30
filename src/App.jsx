@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays,
   CheckCircle2, ChevronDown, ChevronRight, CirclePlay, Clapperboard,
   Clock3, Download, Film, Github, Heart, LoaderCircle, Menu, Search,
-  Sparkles, Star, Ticket, Upload, X,
+  Share2, Sparkles, Star, Ticket, Upload, X,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
@@ -94,7 +94,7 @@ function UploadModal({ onClose, onComplete }) {
       return;
     }
     if (candidate.size > 10 * 1024 * 1024) {
-      setError('This file is over 10 MB. The current API accepts exports up to 10 MB.');
+      setError('This file is over 10 MB. The current upload service accepts exports up to 10 MB.');
       return;
     }
     setFile(candidate);
@@ -118,7 +118,7 @@ function UploadModal({ onClose, onComplete }) {
         if (progress.status === 'error') throw new Error(progress.error || 'The analysis could not be completed.');
         if (progress.status === 'done') {
           const result = await getJobResults(started.job_id);
-          if (!result?.stats) throw new Error('The API returned no analytics data.');
+          if (!result?.stats) throw new Error('The CineStats analysis service returned no analytics data.');
           onComplete(result, started.job_id);
           return;
         }
@@ -169,7 +169,7 @@ function UploadModal({ onClose, onComplete }) {
             {error ? <p className="form-error"><AlertCircle size={15} /> {error}</p> : null}
             <div className="import-steps"><div><span>01</span><p>Export your data at <a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">Letterboxd ↗</a></p></div><div><span>02</span><p>Upload the original ZIP</p></div><div><span>03</span><p>Explore your film life</p></div></div>
             <button className="button button-primary button-wide" disabled={!file} onClick={processFile}>Read my film diary <ArrowRight size={17} /></button>
-            <p className="privacy-note">Your export is processed by the configured CineStats API. Don't upload anything you don't want processed.</p>
+            <p className="privacy-note">Your Letterboxd export is processed by CineStats. Matched films are enriched with metadata, community ratings and poster artwork using the <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB API</a>. Don't upload anything you don't want processed.</p>
           </>
         ) : (
           <div className="processing-panel processing-cinema">
@@ -340,10 +340,11 @@ function RatingList({ title, data }) {
 function MiniPoster({ film, size = 'normal' }) {
   const [broken, setBroken] = useState(false);
   const path = film?.poster_path;
+  const imageSize = size === 'featured' ? 'w500' : 'w342';
   return (
     <div className={'mini-poster mini-poster-' + size}>
       {path && !broken
-        ? <img src={'https://image.tmdb.org/t/p/w342' + path} alt={film?.title || 'Film poster'} loading="lazy" onError={() => setBroken(true)} />
+        ? <img src={'https://image.tmdb.org/t/p/' + imageSize + path} alt={film?.title || 'Film poster'} loading="lazy" onError={() => setBroken(true)} />
         : <div className="poster-placeholder"><Film size={16} /></div>}
     </div>
   );
@@ -514,8 +515,9 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
                 <div className="monthly-shelf-stats"><strong>{month.total_films}</strong><span>screenings</span><strong>{month.avg_rating ? Number(month.avg_rating).toFixed(1) + '★' : '—'}</strong><span>avg rating</span></div>
               </div>
               <div className="monthly-poster-row">
-                {(month.films || []).slice(0, 10).map((film, i) => <div className="monthly-poster" key={film.title + '-' + i} title={film.title}><MiniPoster film={film} size="shelf" /><span>{film.title}</span></div>)}
+                {(month.films || []).slice(0, 4).map((film, i) => <div className="monthly-poster" key={film.title + '-' + i} title={film.title}><MiniPoster film={film} size="shelf" /><span>{film.title}</span></div>)}
                 {!(month.films || []).length ? <p className="data-empty">No matched posters for this month yet.</p> : null}
+                {(month.films || []).length > 4 ? <div className="monthly-more"><span className="monthly-more-count">+{month.films.length - 4}</span><span>more screenings</span><small>Full month in your diary</small></div> : null}
               </div>
             </article>
           ))}
@@ -552,6 +554,16 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
 
       <section className="dash-section">
         <AnalyticsSectionHeading number="10" eyebrow="THE SMALL PRINT OF YOUR TASTE" title={<>What your ratings <em>reveal.</em></>} note="Descriptive, not definitive" />
+        {(community.latest_five_star || []).length ? <div className="ratings-film-reel">
+          <div className="ratings-film-reel-heading"><span>THE LAST FOUR FILMS YOU LOVED</span><span>YOUR MOST RECENT DISTINCT FIVE-STAR DIARY ENTRIES</span></div>
+          <div className="ratings-film-reel-intro"><strong>{community.five_star_count || 0}</strong><span>films in your diary have earned five stars.</span><span className="ratings-film-reel-note">These four are the latest you watched — rewatches don't take extra slots.</span></div>
+          <div className="ratings-film-reel-grid">
+            {community.latest_five_star.slice(0, 4).map((film, index) => <article className="ratings-film-card" key={(film.title || 'film') + '-' + index}>
+              <div className="ratings-film-poster"><MiniPoster film={film} size="featured" /><span className="ratings-film-index">0{index + 1}</span><span className="ratings-film-score">5.0 <i>★</i></span></div>
+              <div className="ratings-film-copy"><h3>{film.title || 'Untitled film'}</h3><span>{film.year || 'Year unknown'}</span><span className="ratings-film-watched">{film.watched_date ? 'WATCHED ' + film.watched_date : 'FIVE-STAR FILM'}</span></div>
+            </article>)}
+          </div>
+        </div> : <div className="ratings-film-reel ratings-film-reel-empty"><div className="ratings-film-reel-heading"><span>YOUR FIVE-STAR CLUB</span></div><p>No matched five-star diary films were found yet. Rate films five stars and add them to your diary to build this reel.</p></div>}
         <div className="rich-grid rich-grid-two">
           <div className="data-panel">
             <div className="data-panel-title"><span>YOUR RATING TEMPERAMENT</span><span className="eyebrow">SELF-REPORTED RATINGS</span></div>
@@ -567,7 +579,12 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
           </div>
           <div className="data-panel">
             <div className="data-panel-title"><span>THE YEARS ON THE TICKET</span><span className="eyebrow">RELEASE-YEAR REFLECTION</span></div>
-            <div className="release-pair"><div><span>Average release year</span><strong>{advanced.average_release_year || '—'}</strong></div><div><span>Oldest matched film</span><strong>{advanced.oldest_film?.title || '—'}</strong><small>{advanced.oldest_film?.year || ''}</small></div><div><span>Newest matched film</span><strong>{advanced.newest_film?.title || '—'}</strong><small>{advanced.newest_film?.year || ''}</small></div><div><span>Most rewatched</span><strong>{advanced.most_rewatched_film?.title || '—'}</strong><small>{advanced.most_rewatched_film ? advanced.most_rewatched_film.rewatch_count + ' rewatch entries' : ''}</small></div></div>
+            <div className="release-pair">
+              <div className="release-stat-average"><span>Average release year</span><strong>{advanced.average_release_year || '—'}</strong></div>
+              <div className="release-stat-film"><span className="release-stat-label">Oldest matched film</span><div className="release-stat-content">{advanced.oldest_film?.poster_path ? <MiniPoster film={advanced.oldest_film} size="shelf" /> : null}<div><strong>{advanced.oldest_film?.title || '—'}</strong><small>{advanced.oldest_film?.year || ''}</small></div></div></div>
+              <div className="release-stat-film"><span className="release-stat-label">Newest matched film</span><div className="release-stat-content">{advanced.newest_film?.poster_path ? <MiniPoster film={advanced.newest_film} size="shelf" /> : null}<div><strong>{advanced.newest_film?.title || '—'}</strong><small>{advanced.newest_film?.year || ''}</small></div></div></div>
+              <div className="release-stat-film"><span className="release-stat-label">Most rewatched</span><div className="release-stat-content">{advanced.most_rewatched_film?.poster_path ? <MiniPoster film={advanced.most_rewatched_film} size="shelf" /> : null}<div><strong>{advanced.most_rewatched_film?.title || '—'}</strong><small>{advanced.most_rewatched_film ? advanced.most_rewatched_film.rewatch_count + ' rewatch entries' : ''}</small></div></div></div>
+            </div>
             {advanced.correlation_insight ? <p className="editorial-note">{advanced.correlation_insight} <span className="correlation-stat">Correlation: {advanced.release_year_rating_correlation ?? 'not enough data'}</span></p> : null}
           </div>
         </div>
@@ -579,6 +596,8 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
 function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [sharingTopFour, setSharingTopFour] = useState(false);
+  const [shareError, setShareError] = useState('');
   const { stats = {}, meta = {} } = data || {};
   const basic = stats.basic || {};
   const pro = stats.pro || {};
@@ -597,6 +616,117 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
       setDownloadError(err?.response?.data?.detail || 'The report could not be generated. Please try again.');
     } finally { setDownloading(false); }
   };
+
+  const handleShareTopFour = async () => {
+    const favourites = (stats.favorite_films || []).slice(0, 4);
+    if (!favourites.length || sharingTopFour) return;
+    setSharingTopFour(true);
+    setShareError('');
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 1850;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Your browser could not prepare the share card.');
+      context.fillStyle = '#141311';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.strokeStyle = 'rgba(213,171,106,0.38)';
+      context.lineWidth = 2;
+      context.strokeRect(38, 38, canvas.width - 76, canvas.height - 76);
+      context.fillStyle = '#d5ab6a';
+      context.font = '600 18px monospace';
+      context.letterSpacing = '4px';
+      context.fillText('CINESTATS  /  PERSONAL CINEMATHEQUE', 76, 102);
+      context.fillStyle = '#eee7d9';
+      context.font = '500 66px Georgia, serif';
+      context.letterSpacing = '0px';
+      context.fillText('Four that stay', 76, 190);
+      context.fillStyle = '#d94c3a';
+      context.font = 'italic 66px Georgia, serif';
+      context.fillText('with you.', 76, 264);
+
+      const gap = 24;
+      const left = 76;
+      const top = 326;
+      const posterWidth = 500;
+      const posterHeight = 630;
+      const posterImages = await Promise.all(favourites.map(film => new Promise(resolve => {
+        if (!film?.poster_path) return resolve(null);
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => resolve(image);
+        image.onerror = () => resolve(null);
+        image.src = 'https://image.tmdb.org/t/p/w500' + film.poster_path;
+      })));
+
+      favourites.forEach((film, index) => {
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        const x = left + col * (posterWidth + gap);
+        const y = top + row * (posterHeight + 66);
+        context.fillStyle = '#201e1a';
+        context.fillRect(x, y, posterWidth, posterHeight);
+        const image = posterImages[index];
+        if (image) {
+          const scale = Math.max(posterWidth / image.width, posterHeight / image.height);
+          const sw = posterWidth / scale;
+          const sh = posterHeight / scale;
+          context.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, posterWidth, posterHeight);
+        } else {
+          context.strokeStyle = 'rgba(213,171,106,0.4)';
+          context.strokeRect(x + 18, y + 18, posterWidth - 36, posterHeight - 36);
+          context.fillStyle = '#d5ab6a';
+          context.font = '20px monospace';
+          context.fillText('0' + (index + 1) + ' / FAVOURITE', x + 34, y + 58);
+          context.fillStyle = '#eee7d9';
+          context.font = '42px Georgia, serif';
+          const words = String(film?.title || 'Film details unavailable').split(' ');
+          let line = '';
+          let lineY = y + 340;
+          words.forEach(word => {
+            const test = line ? line + ' ' + word : word;
+            if (context.measureText(test).width > posterWidth - 68 && line) {
+              context.fillText(line, x + 34, lineY);
+              line = word;
+              lineY += 52;
+            } else line = test;
+          });
+          if (line) context.fillText(line, x + 34, lineY);
+        }
+        context.fillStyle = '#eee7d9';
+        context.font = '600 24px Georgia, serif';
+        const title = String(film?.title || 'Favourite film');
+        context.fillText(title.length > 34 ? title.slice(0, 31) + '…' : title, x, y + posterHeight + 35);
+        context.fillStyle = '#9e988b';
+        context.font = '16px monospace';
+        context.fillText(String(film?.year || 'YEAR UNKNOWN'), x, y + posterHeight + 59);
+      });
+
+      context.strokeStyle = 'rgba(213,171,106,0.25)';
+      context.beginPath();
+      context.moveTo(76, 1770);
+      context.lineTo(1124, 1770);
+      context.stroke();
+      context.fillStyle = '#9e988b';
+      context.font = '16px monospace';
+      context.fillText('YOUR LETTERBOXD PROFILE FAVOURITES  ·  IN YOUR ORIGINAL ORDER', 76, 1805);
+
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('The share card could not be exported.')), 'image/png'));
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'CineStats-Top-Four.png';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+    } catch (error) {
+      setShareError(error?.message || 'The share card could not be created. Please try again.');
+    } finally {
+      setSharingTopFour(false);
+    }
+  };
+
   return (
     <main className="dashboard section-shell">
       <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
@@ -608,6 +738,26 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
         <Metric label="Your average rating" value={basic.average_rating ? Number(basic.average_rating).toFixed(2) + ' ★' : '—'} note="From your ratings" symbol={<Star size={15} />} />
         <Metric label="Longest streak" value={Number(pro.longest_watch_streak || 0) + ' days'} note="Consecutive days with a diary entry" symbol={<Clock3 size={15} />} />
       </div>
+      {(stats.favorite_films || []).length ? <section className="top-four-section">
+        <div className="top-four-heading">
+          <div><div className="section-marker"><span>00</span><span>YOUR LETTERBOXD PROFILE FAVOURITES</span></div><h2>Four that <em>stay with you.</em></h2><p>The four films you chose for your profile, in your original order. Your taste, your call.</p></div>
+          <div className="top-four-heading-actions">
+            <span className="top-four-note">YOUR PERSONAL CANON · FOUR FRAMES, FOREVER</span>
+            <button className="button button-outline top-four-share" type="button" onClick={handleShareTopFour} disabled={sharingTopFour} aria-label="Download a shareable image of your Letterboxd Top Four">
+              {sharingTopFour ? <LoaderCircle size={15} className="spin" /> : <Share2 size={15} />}
+              {sharingTopFour ? 'Making card…' : 'Share my four'}
+            </button>
+          </div>
+        </div>
+        {shareError ? <p className="form-error top-four-share-error" role="status">{shareError}</p> : null}
+        <div className="top-four-grid">
+          {stats.favorite_films.slice(0, 4).map((film, index) => <article className="top-four-card" key={film.favorite_url || (film.title + '-' + index)}>
+            <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating">{film.resolved ? 'IN YOUR CANON' : 'UNRESOLVED'}</span><span className="top-four-frame-mark" aria-hidden="true">✳</span></div>
+            <div className="top-four-copy"><span className="top-four-position">FRAME 0{index + 1}</span><h3>{film.title || 'Favourite film'}</h3><span>{film.year || (film.resolved ? 'Release year unknown' : 'Film details unavailable')}</span></div>
+          </article>)}
+        </div>
+        <div className="top-four-footerline"><span>FOUR FILMS. A THOUSAND FEELINGS.</span><span>SELECTED BY YOU · NEVER RANKED BY AN ALGORITHM</span></div>
+      </section> : null}
       <section className="dash-section">
         <div className="dash-section-title"><div><div className="section-marker"><span>01</span><span>THE PASSAGE OF TIME</span></div><h2>Your years <em>in film.</em></h2></div><span className="dash-count">{yearData.length} {yearData.length === 1 ? 'year' : 'years'} represented</span></div>
         <div className="chart-grid">
@@ -653,6 +803,10 @@ function Footer({ onImport, dashboard = false }) {
             <a className="footer-social-link footer-github-link" href="https://github.com/tirthharshi-debug/CineStats-Next" target="_blank" rel="noopener noreferrer" aria-label="CineStats on GitHub" title="GitHub"><Github size={22} strokeWidth={1.8} /></a>
           </div>
         </div>
+      </div>
+      <div className="tmdb-attribution" aria-label="TMDB attribution">
+        <p>Film metadata and poster images provided by <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDB</a>.</p>
+        <p>This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org/about/logos-attribution" target="_blank" rel="noopener noreferrer">TMDB logo and attribution guidelines <ArrowUpRight size={12} /></a></p>
       </div>
       <div className="footer-bottom"><span>© 2026 CINESTATS</span><span>INDEPENDENT · UNOFFICIAL · FOR CINEPHILES</span></div>
     </footer>

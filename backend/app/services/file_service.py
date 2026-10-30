@@ -69,6 +69,35 @@ def _find_csv(extract_path: str, name: str) -> str | None:
     return None
 
 
+def parse_profile_favorites(extract_path: str) -> list[str]:
+    """Return profile favourite-film URLs in the order selected on Letterboxd."""
+    path = _find_csv(extract_path, "profile.csv")
+    if not path:
+        return []
+
+    try:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except (OSError, ValueError, pd.errors.ParserError):
+        return []
+
+    df.columns = [
+        str(column).strip().lower().replace(" ", "_")
+        for column in df.columns
+    ]
+    if "favorite_films" not in df.columns:
+        return []
+
+    favorites = []
+    seen = set()
+    for value in df["favorite_films"]:
+        for url in re.findall(r"https?://[^\s,;|]+", value):
+            url = url.rstrip(".,)")
+            if url not in seen:
+                seen.add(url)
+                favorites.append(url)
+    return favorites
+
+
 # Core CSV files that a valid Letterboxd export must contain (at least one).
 _REQUIRED_CSVS = ["diary.csv", "watched.csv", "ratings.csv"]
 

@@ -123,6 +123,84 @@ class TMDBService:
         # Fallback: first result
         return results[0]
 
+    async def enrich_favorite_films(self, favorite_urls: list[str]) -> list[dict]:
+        """Resolve Letterboxd profile favourites to TMDB metadata without changing order.
+
+        Unresolvable links remain as explicit unresolved slots; they are never
+        replaced with an unrelated highly-rated film.
+        """
+        from html import unescape
+        from urllib.parse import urlparse
+
+        results = []
+        allowed_hosts = {"boxd.it", "www.boxd.it", "letterboxd.com", "www.letterboxd.com"}
+
+        for index, favorite_url in enumerate(favorite_urls):
+            item = {
+                "favorite_url": favorite_url,
+                "position": index + 1,
+                "resolved": False,
+                "title": "Favourite film",
+                "year": None,
+                "poster_path": None,
+                "tmdb_id": None,
+            }
+            try:
+                parsed_input = urlparse(favorite_url)
+                if parsed_input.scheme != "https" or parsed_input.hostname not in allowed_hosts:
+                    results.append(item)
+                    continue
+
+                response = await self.client.get(
+                    favorite_url,
+                    follow_redirects=True,
+                    headers={"User-Agent": "CineStats/1.0 (Letterboxd favourites import)"},
+                    timeout=15.0,
+                )
+                response.raise_for_status()
+                final_url = urlparse(str(response.url))
+                if final_url.hostname not in {"letterboxd.com", "www.letterboxd.com"}:
+                    results.append(item)
+                    continue
+
+                title_match = re.search(
+                    r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
+                    response.text,
+                    flags=re.IGNORECASE,
+                )
+                if not title_match:
+                    title_match = re.search(
+                        r'<title[^>]*>(.*?)</title>',
+                        response.text,
+                        flags=re.IGNORECASE | re.DOTALL,
+                    )
+                page_title = unescape(title_match.group(1)).strip() if title_match else ""
+                page_title = re.sub(r"\s*[—|]\s*Letterboxd\s*$", "", page_title, flags=re.IGNORECASE)
+                year_match = re.search(r"\((\d{4})\)", page_title)
+                year = int(year_match.group(1)) if year_match else None
+                title = re.sub(r"\s*\(\d{4}\)\s*$", "", page_title).strip()
+                if not title:
+                    results.append(item)
+                    continue
+
+                item["title"] = title
+                item["year"] = year
+                tmdb = await self.enrich_movie(title, year)
+                if tmdb:
+                    item.update({
+                        "title": tmdb.get("title") or title,
+                        "year": tmdb.get("year") or year,
+                        "poster_path": tmdb.get("poster_path"),
+                        "tmdb_id": tmdb.get("tmdb_id"),
+                        "resolved": True,
+                    })
+            except Exception:
+                # A single broken/unavailable favourite must not fail the import.
+                pass
+            results.append(item)
+
+        return results
+
     async def get_movie_details(self, tmdb_id: int) -> dict | None:
         """Fetch full movie details with credits."""
         params = {
