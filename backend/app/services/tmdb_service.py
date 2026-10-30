@@ -62,8 +62,12 @@ class TMDBService:
                 self._request_count += 1
 
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", 5))
-                    await asyncio.sleep(retry_after)
+                    # Retry-After is server-controlled and may be malformed.
+                    try:
+                        retry_after = float(response.headers.get("Retry-After", "5"))
+                    except (TypeError, ValueError):
+                        retry_after = 5.0
+                    await asyncio.sleep(max(0.0, min(retry_after, 60.0)))
                     continue
 
                 response.raise_for_status()
