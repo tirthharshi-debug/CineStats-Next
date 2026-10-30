@@ -478,7 +478,12 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
         yr = int(yr)
         release_date = tmdb.get("release_date", str(yr))
         title = tmdb.get("title", m.get("title", "Unknown"))
-        film_entries.append({"release_date": release_date, "year": yr, "title": title})
+        film_entries.append({
+            "release_date": release_date,
+            "year": yr,
+            "title": title,
+            "poster_path": tmdb.get("poster_path"),
+        })
 
     if film_entries:
         release_years = [f["year"] for f in film_entries]
@@ -488,8 +493,8 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
         sorted_by_date = sorted(film_entries, key=lambda f: f["release_date"] or "0000")
         oldest = sorted_by_date[0]
         newest = sorted_by_date[-1]
-        results["oldest_film"] = {"title": oldest["title"], "year": oldest["year"]}
-        results["newest_film"] = {"title": newest["title"], "year": newest["year"]}
+        results["oldest_film"] = {key: oldest[key] for key in ("title", "year", "poster_path")}
+        results["newest_film"] = {key: newest[key] for key in ("title", "year", "poster_path")}
     else:
         results["average_release_year"] = None
         results["oldest_film"] = None
@@ -501,9 +506,16 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
         rewatches = diary_df[diary_df['is_rewatch'] == True]
         if not rewatches.empty:
             most_rw = rewatches[name_col].value_counts()
+            rewatched_title = str(most_rw.index[0])
+            matched_rewatch = next(
+                (entry for entry in film_entries if entry["title"].strip().lower() == rewatched_title.strip().lower()),
+                None,
+            )
             results["most_rewatched_film"] = {
-                "title": str(most_rw.index[0]),
-                "rewatch_count": int(most_rw.iloc[0])
+                "title": rewatched_title,
+                "rewatch_count": int(most_rw.iloc[0]),
+                "year": matched_rewatch["year"] if matched_rewatch else None,
+                "poster_path": matched_rewatch["poster_path"] if matched_rewatch else None,
             }
         else:
             results["most_rewatched_film"] = None
