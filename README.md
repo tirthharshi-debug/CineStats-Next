@@ -13,7 +13,7 @@ CineStats Next is a cinema-first evolution of CineStats, taking visual cues from
 - Data-backed sections for yearly/rating charts, genres, director and actor credits, runtime, watch calendar, monthly poster shelves, decade leaderboards, country/language patterns, crowd-rating comparisons and rating insights.
 - Isolated copy of the existing FastAPI/TMDB/SQLite/PDF backend with initial upload, ZIP and CORS hardening.
 - GitHub Actions checks for the React production build and Python backend tests/syntax.
-- Configurable upload-job admission limit (`CINESTATS_MAX_ACCEPTED_JOBS`, default `4` per backend process); increase only after load testing the target host.
+- Configurable upload-job admission limit (`CINESTATS_MAX_ACCEPTED_JOBS`, default `6` per backend process); increase only after load testing the target host.
 
 ## Stack
 
@@ -62,7 +62,7 @@ Open the local URL printed by Vite. The root `.env.example` points to `http://lo
 
 ## Backend concurrency tuning
 
-Set `CINESTATS_MAX_ACCEPTED_JOBS` in `backend/.env` or your backend hosting environment to change how many uploads are accepted for processing at once **per backend process**. The default is `4`. For example, `CINESTATS_MAX_ACCEPTED_JOBS=6` allows up to six accepted jobs in one process. Requests above the limit receive HTTP 429 and can retry shortly.
+Set `CINESTATS_MAX_ACCEPTED_JOBS` in `backend/.env` or your backend hosting environment to change how many uploads are accepted for processing at once **per backend process**. The default is `6`. You can lower or raise it with this setting; `CINESTATS_MAX_ACCEPTED_JOBS=6` allows up to six accepted jobs in one process. Requests above the limit receive HTTP 429 and can retry shortly.
 
 This is not a global limit across multiple worker processes or hosting instances. Raising it increases simultaneous memory, CPU and TMDB usage; validate with realistic exports and slow API responses before raising it in production. The in-memory job registry also means multi-worker deployments are not yet safe for reliable job polling.
 
