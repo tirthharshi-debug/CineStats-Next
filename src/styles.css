@@ -685,3 +685,171 @@ a { color: inherit; text-decoration: none; }
   .top-four-card, .top-four-copy h3 { transition: none !important; }
   .top-four-card:hover { transform: none; }
 }
+
+
+/* Cinema-grade dashboard atmosphere: richer blacks, deeper red spill, and quieter chrome. */
+.dashboard {
+  isolation: isolate;
+}
+.dashboard::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 90px -8vw auto;
+  height: 980px;
+  opacity: .9;
+  background:
+    radial-gradient(ellipse at 8% 18%, rgba(105, 32, 28, .22), transparent 36%),
+    radial-gradient(ellipse at 87% 30%, rgba(151, 93, 42, .10), transparent 31%),
+    linear-gradient(180deg, rgba(8, 8, 8, .18), transparent 76%);
+}
+.dashboard-masthead h1 { text-shadow: 0 12px 46px rgba(0,0,0,.34); }
+.dashboard-intro { max-width: 570px; color: #c4b9a8; }
+.dashboard-rule { border-color: rgba(213,171,106,.22); }
+.metric-grid { gap: 1px; background: rgba(213,171,106,.13); border: 1px solid rgba(213,171,106,.13); }
+.metric-card { background: linear-gradient(145deg, rgba(35,31,27,.98), rgba(23,21,19,.98)); transition: background .28s ease, transform .28s ease; }
+.metric-card:hover { background: linear-gradient(145deg, rgba(48,35,30,.98), rgba(27,23,20,.98)); transform: translateY(-2px); }
+.dash-section { position: relative; }
+.dash-section-title { margin-bottom: 28px; }
+.dash-section-title h2 { text-shadow: 0 8px 32px rgba(0,0,0,.25); }
+.chart-panel, .data-panel, .insight-note, .monthly-shelf {
+  background: linear-gradient(145deg, rgba(34,31,27,.96), rgba(24,22,20,.98));
+  border-color: rgba(213,171,106,.15);
+  box-shadow: 0 18px 55px rgba(0,0,0,.10);
+}
+.chart-panel-heading { border-bottom-color: rgba(213,171,106,.14); }
+.chart-ornament { color: rgba(213,171,106,.6); }
+.dash-section + .dash-section { margin-top: 108px; }
+.dashboard .section-marker { color: #d5ab6a; }
+.dashboard .section-marker span:first-child { color: #f06b58; }
+.dashboard .eyebrow { letter-spacing: .15em; }
+.dashboard-meta { border-top-color: rgba(213,171,106,.22); }
+
+/* Monthly diary: four deliberate stills, then a discreet count instead of a wall of thumbnails. */
+.monthly-shelves { gap: 26px; }
+.monthly-shelf {
+  position: relative;
+  overflow: hidden;
+  padding: 26px;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(105,32,28,.15), transparent 45%),
+    linear-gradient(140deg, rgba(32,29,25,.98), rgba(19,18,16,.99));
+  border: 1px solid rgba(213,171,106,.17);
+  box-shadow: 0 18px 50px rgba(0,0,0,.14);
+}
+.monthly-shelf::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--red), rgba(213,171,106,.45), transparent 76%);
+  opacity: .6;
+}
+.monthly-shelf-head { align-items: flex-end; padding-bottom: 20px; border-bottom: 1px solid rgba(213,171,106,.16); }
+.monthly-shelf-head h3 { font-family: var(--serif); font-size: clamp(25px, 3vw, 34px); letter-spacing: -.025em; }
+.monthly-poster-row { align-items: flex-start; gap: 18px; padding-top: 23px; }
+.monthly-poster { width: clamp(88px, 11vw, 128px); flex: 0 0 clamp(88px, 11vw, 128px); }
+.monthly-poster .mini-poster { box-shadow: 0 12px 28px rgba(0,0,0,.36); transition: transform .32s ease, box-shadow .32s ease; }
+.monthly-poster:hover .mini-poster { transform: translateY(-4px) rotate(-.5deg); box-shadow: 0 18px 36px rgba(0,0,0,.5); }
+.monthly-poster > span { margin-top: 9px; color: #c8bdad; font-size: 11px; line-height: 1.45; }
+.monthly-more {
+  min-height: 170px;
+  width: 112px;
+  flex: 0 0 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  border-left: 1px solid rgba(213,171,106,.24);
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.monthly-more-count { color: var(--brass); font-family: var(--serif); font-size: 42px; line-height: 1; }
+.monthly-more small { color: #81796d; font-size: 10px; line-height: 1.4; }
+
+/* Top Four becomes the personal-canon feature, framed like four prints in a private screening room. */
+.top-four-section {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-block: 64px 100px;
+  padding: clamp(24px, 4.4vw, 54px);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(112,38,30,.20), transparent 58%),
+    linear-gradient(155deg, rgba(29,26,23,.98), rgba(15,14,13,.99));
+  border: 1px solid rgba(213,171,106,.24);
+  box-shadow: 0 34px 90px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.025);
+}
+.top-four-section::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 14px;
+  border: 1px solid rgba(213,171,106,.09);
+  pointer-events: none;
+}
+.top-four-section::after {
+  content: "CS / 35";
+  position: absolute;
+  z-index: -1;
+  right: 25px;
+  bottom: 18px;
+  color: rgba(213,171,106,.08);
+  font-family: var(--mono);
+  font-size: clamp(50px, 9vw, 112px);
+  letter-spacing: -.08em;
+  pointer-events: none;
+}
+.top-four-heading { position: relative; gap: 28px; align-items: flex-end; margin-bottom: 38px; }
+.top-four-heading h2 { font-size: clamp(34px, 4.8vw, 58px); letter-spacing: -.04em; }
+.top-four-heading p { max-width: 480px; color: #bdb2a2; }
+.top-four-heading-actions { max-width: 260px; }
+.top-four-note { color: var(--brass); font-size: 9px; line-height: 1.7; letter-spacing: .16em; text-align: right; }
+.top-four-grid { gap: clamp(14px, 2.3vw, 28px); }
+.top-four-card { min-width: 0; }
+.top-four-art {
+  position: relative;
+  overflow: hidden;
+  padding: 8px;
+  background: linear-gradient(140deg, rgba(213,171,106,.24), rgba(213,171,106,.025) 34%, rgba(0,0,0,.3));
+  border: 1px solid rgba(213,171,106,.20);
+  box-shadow: 0 18px 36px rgba(0,0,0,.32);
+}
+.top-four-art::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,.08), transparent 30%, transparent 66%, rgba(0,0,0,.28));
+  opacity: .8;
+}
+.top-four-art .mini-poster-featured { transition: transform .55s cubic-bezier(.2,.7,.2,1), filter .55s ease; }
+.top-four-card:hover .top-four-art .mini-poster-featured { transform: scale(1.025); filter: saturate(1.08) contrast(1.04); }
+.top-four-index { z-index: 2; top: 18px; left: 18px; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+.top-four-rating { z-index: 2; bottom: 18px; right: 18px; color: #f0dfc0; text-shadow: 0 2px 10px rgba(0,0,0,.9); }
+.top-four-frame-mark { position: absolute; z-index: 3; right: 18px; top: 16px; color: rgba(245,225,187,.8); font-size: 15px; opacity: 0; transform: rotate(-25deg) scale(.7); transition: opacity .35s ease, transform .35s ease; }
+.top-four-card:hover .top-four-frame-mark { opacity: 1; transform: rotate(0) scale(1); }
+.top-four-copy { padding: 15px 2px 0; }
+.top-four-position { display: block; margin-bottom: 8px; color: var(--brass); font-family: var(--mono); font-size: 9px; letter-spacing: .16em; }
+.top-four-copy h3 { font-family: var(--serif); font-size: clamp(16px, 1.5vw, 21px); line-height: 1.3; }
+.top-four-copy > span:last-child { color: #a59b8c; }
+.top-four-footerline { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid rgba(213,171,106,.17); color: #958a79; font-family: var(--mono); font-size: 9px; letter-spacing: .12em; line-height: 1.6; }
+@media (max-width: 760px) {
+  .monthly-shelf { padding: 18px; }
+  .monthly-poster-row { gap: 12px; }
+  .monthly-poster { width: 82px; flex-basis: 82px; }
+  .monthly-more { width: 90px; flex-basis: 90px; padding-left: 12px; }
+  .top-four-heading { align-items: flex-start; flex-direction: column; }
+  .top-four-heading-actions { align-items: flex-start; max-width: 100%; }
+  .top-four-note { text-align: left; }
+  .top-four-footerline { flex-direction: column; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monthly-poster .mini-poster, .top-four-art .mini-poster-featured, .top-four-frame-mark { transition: none !important; }
+  .monthly-poster:hover .mini-poster, .top-four-card:hover .top-four-art .mini-poster-featured { transform: none; }
+}
