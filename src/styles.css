@@ -939,3 +939,29 @@ a { color: inherit; text-decoration: none; }
   .release-stat-content .mini-poster-shelf { width: 34px; height: 51px; flex-basis: 34px; }
   .release-stat-content strong { font-size: 12px; }
 }
+
+
+.ratings-film-reel-intro {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: -3px 0 22px;
+  color: #c8bdad;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.ratings-film-reel-intro > strong {
+  color: var(--brass, #d5ab6a);
+  font: 500 35px/1 var(--serif, Georgia, serif);
+  letter-spacing: -.04em;
+}
+.ratings-film-reel-note { color: #8f8679; font-size: 10px; }
+.ratings-film-watched {
+  display: block;
+  margin-top: 8px;
+  color: var(--brass, #d5ab6a);
+  font: 8px/1.5 var(--mono, monospace);
+  letter-spacing: .08em;
+}
+.ratings-film-reel-empty p { max-width: 520px; color: #a59b8c; font-size: 12px; line-height: 1.8; }
