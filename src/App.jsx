@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays,
   CheckCircle2, ChevronDown, ChevronRight, CirclePlay, Clapperboard,
   Clock3, Download, Film, Github, Heart, LoaderCircle, Menu, Search,
-  Sparkles, Star, Ticket, Upload, X,
+  Share2, Sparkles, Star, Ticket, Upload, X,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
@@ -580,6 +580,8 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
 function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [sharingTopFour, setSharingTopFour] = useState(false);
+  const [shareError, setShareError] = useState('');
   const { stats = {}, meta = {} } = data || {};
   const basic = stats.basic || {};
   const pro = stats.pro || {};
@@ -598,6 +600,117 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
       setDownloadError(err?.response?.data?.detail || 'The report could not be generated. Please try again.');
     } finally { setDownloading(false); }
   };
+
+  const handleShareTopFour = async () => {
+    const favourites = (stats.favorite_films || []).slice(0, 4);
+    if (!favourites.length || sharingTopFour) return;
+    setSharingTopFour(true);
+    setShareError('');
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 1500;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Your browser could not prepare the share card.');
+      context.fillStyle = '#141311';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.strokeStyle = 'rgba(213,171,106,0.38)';
+      context.lineWidth = 2;
+      context.strokeRect(38, 38, canvas.width - 76, canvas.height - 76);
+      context.fillStyle = '#d5ab6a';
+      context.font = '600 18px monospace';
+      context.letterSpacing = '4px';
+      context.fillText('CINESTATS  /  PERSONAL CINEMATHEQUE', 76, 102);
+      context.fillStyle = '#eee7d9';
+      context.font = '500 66px Georgia, serif';
+      context.letterSpacing = '0px';
+      context.fillText('Four that stay', 76, 190);
+      context.fillStyle = '#d94c3a';
+      context.font = 'italic 66px Georgia, serif';
+      context.fillText('with you.', 76, 264);
+
+      const gap = 24;
+      const left = 76;
+      const top = 326;
+      const posterWidth = 500;
+      const posterHeight = 750;
+      const posterImages = await Promise.all(favourites.map(film => new Promise(resolve => {
+        if (!film?.poster_path) return resolve(null);
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => resolve(image);
+        image.onerror = () => resolve(null);
+        image.src = 'https://image.tmdb.org/t/p/w500' + film.poster_path;
+      })));
+
+      favourites.forEach((film, index) => {
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        const x = left + col * (posterWidth + gap);
+        const y = top + row * (posterHeight + 66);
+        context.fillStyle = '#201e1a';
+        context.fillRect(x, y, posterWidth, posterHeight);
+        const image = posterImages[index];
+        if (image) {
+          const scale = Math.max(posterWidth / image.width, posterHeight / image.height);
+          const sw = posterWidth / scale;
+          const sh = posterHeight / scale;
+          context.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, posterWidth, posterHeight);
+        } else {
+          context.strokeStyle = 'rgba(213,171,106,0.4)';
+          context.strokeRect(x + 18, y + 18, posterWidth - 36, posterHeight - 36);
+          context.fillStyle = '#d5ab6a';
+          context.font = '20px monospace';
+          context.fillText('0' + (index + 1) + ' / FAVOURITE', x + 34, y + 58);
+          context.fillStyle = '#eee7d9';
+          context.font = '42px Georgia, serif';
+          const words = String(film?.title || 'Film details unavailable').split(' ');
+          let line = '';
+          let lineY = y + 340;
+          words.forEach(word => {
+            const test = line ? line + ' ' + word : word;
+            if (context.measureText(test).width > posterWidth - 68 && line) {
+              context.fillText(line, x + 34, lineY);
+              line = word;
+              lineY += 52;
+            } else line = test;
+          });
+          if (line) context.fillText(line, x + 34, lineY);
+        }
+        context.fillStyle = '#eee7d9';
+        context.font = '600 24px Georgia, serif';
+        const title = String(film?.title || 'Favourite film');
+        context.fillText(title.length > 34 ? title.slice(0, 31) + '…' : title, x, y + posterHeight + 35);
+        context.fillStyle = '#9e988b';
+        context.font = '16px monospace';
+        context.fillText(String(film?.year || 'YEAR UNKNOWN'), x, y + posterHeight + 59);
+      });
+
+      context.strokeStyle = 'rgba(213,171,106,0.25)';
+      context.beginPath();
+      context.moveTo(76, 1430);
+      context.lineTo(1124, 1430);
+      context.stroke();
+      context.fillStyle = '#9e988b';
+      context.font = '16px monospace';
+      context.fillText('YOUR LETTERBOXD PROFILE FAVOURITES  ·  IN YOUR ORIGINAL ORDER', 76, 1465);
+
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('The share card could not be exported.')), 'image/png'));
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'CineStats-Top-Four.png';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+    } catch (error) {
+      setShareError(error?.message || 'The share card could not be created. Please try again.');
+    } finally {
+      setSharingTopFour(false);
+    }
+  };
+
   return (
     <main className="dashboard section-shell">
       <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
@@ -612,8 +725,15 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
       {(stats.favorite_films || []).length ? <section className="top-four-section">
         <div className="top-four-heading">
           <div><div className="section-marker"><span>00</span><span>YOUR LETTERBOXD PROFILE FAVOURITES</span></div><h2>Four that <em>stay with you.</em></h2><p>The four films you chose for your profile, in your original order. Your taste, your call.</p></div>
-          <span className="top-four-note">PERSONAL FAVOURITES</span>
+          <div className="top-four-heading-actions">
+            <span className="top-four-note">PERSONAL FAVOURITES</span>
+            <button className="button button-outline top-four-share" type="button" onClick={handleShareTopFour} disabled={sharingTopFour} aria-label="Download a shareable image of your Letterboxd Top Four">
+              {sharingTopFour ? <LoaderCircle size={15} className="spin" /> : <Share2 size={15} />}
+              {sharingTopFour ? 'Making card…' : 'Share my four'}
+            </button>
+          </div>
         </div>
+        {shareError ? <p className="form-error top-four-share-error" role="status">{shareError}</p> : null}
         <div className="top-four-grid">
           {stats.favorite_films.slice(0, 4).map((film, index) => <article className="top-four-card" key={film.favorite_url || (film.title + '-' + index)}>
             <div className="top-four-art"><MiniPoster film={film} size="featured" /><span className="top-four-index">0{index + 1}</span><span className="top-four-rating">{film.resolved ? 'FAVOURITE' : 'UNRESOLVED'}</span></div>
