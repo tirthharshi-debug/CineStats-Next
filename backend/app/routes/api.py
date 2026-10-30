@@ -35,7 +35,7 @@ _jobs: dict[str, dict] = {}
 _CLEANUP_INTERVAL = 600   # 10 minutes
 _JOB_TTL = 1800           # 30 minutes after completion
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB compressed upload limit
-MAX_ACCEPTED_JOBS = max(1, int(os.getenv("CINESTATS_MAX_ACCEPTED_JOBS", "4")))  # queued/running jobs per process
+MAX_ACCEPTED_JOBS = max(1, int(os.getenv("CINESTATS_MAX_ACCEPTED_JOBS", "6")))  # queued/running jobs per process
 _admission_lock = asyncio.Lock()
 _accepted_jobs = 0
 
