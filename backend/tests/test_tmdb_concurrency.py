@@ -124,20 +124,66 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(tmdb_service, "RATE_WINDOW", 0.03):
                 responses = await asyncio.gather(*(
                     service._rate_limited_request(f"https://example.test/{i}", {})
-                    for i in range(10)
+                    for i in range(30)
                 ))
                 # Let scheduled token-release tasks finish before restoring globals.
                 await asyncio.sleep(0.04)
 
-            self.assertEqual(len(responses), 10)
+            self.assertEqual(len(responses), 30)
             self.assertTrue(all(response == {"ok": True} for response in responses))
-            self.assertEqual(len(starts), 10)
-            # Three requests may start immediately; later requests must wait for
-            # rate tokens to be returned after the configured window.
-            self.assertGreaterEqual(max(starts) - min(starts), 0.045)
+            self.assertEqual(len(starts), 30)
+            # Ten groups of three requests should span multiple limiter windows.
+            # Keep a generous threshold to avoid depending on exact scheduler timing.
+            self.assertGreaterEqual(max(starts) - min(starts), 0.20)
         finally:
             tmdb_service._RATE_TOKENS = old_tokens
             tmdb_service.RATE_LIMIT_PER_WINDOW = old_limit
+
+    async def test_malformed_and_oversized_retry_after_values_are_bounded(self):
+        old_tokens = tmdb_service._RATE_TOKENS
+        tmdb_service._RATE_TOKENS = asyncio.Semaphore(5)
+
+        class FakeResponse:
+            def __init__(self, status_code, headers=None):
+                self.status_code = status_code
+                self.headers = headers or {}
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeClient:
+            def __init__(self, retry_after):
+                self.calls = 0
+                self.retry_after = retry_after
+
+            async def get(self, *_args, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    return FakeResponse(429, {"Retry-After": self.retry_after})
+                return FakeResponse(200)
+
+        try:
+            for header_value, expected_delay in (("not-a-number", 5.0), ("9999", 60.0)):
+                with self.subTest(retry_after=header_value):
+                    service = tmdb_service.TMDBService.__new__(tmdb_service.TMDBService)
+                    service.client = FakeClient(header_value)
+                    service._request_count = 0
+
+                    with patch("app.services.tmdb_service.asyncio.sleep", new_callable=unittest.mock.AsyncMock) as mocked_sleep:
+                        result = await service._rate_limited_request(
+                            "https://example.test/resource", {}, retries=2
+                        )
+
+                    self.assertEqual(result, {"ok": True})
+                    self.assertEqual(service.client.calls, 2)
+                    self.assertIn(unittest.mock.call(expected_delay), mocked_sleep.await_args_list)
+                    # Drain scheduled token-release tasks before the next subtest.
+                    await asyncio.sleep(0.01)
+        finally:
+            tmdb_service._RATE_TOKENS = old_tokens
 
     async def test_http_429_retries_after_retry_after_header(self):
         old_tokens = tmdb_service._RATE_TOKENS
