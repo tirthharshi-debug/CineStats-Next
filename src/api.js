@@ -16,18 +16,25 @@ export async function uploadLetterboxdExport(file, onUploadProgress) {
   return response.data;
 }
 
-export async function getJobProgress(jobId) {
-  const response = await api.get(`/progress/${encodeURIComponent(jobId)}`);
+export async function getJobProgress(jobId, jobToken) {
+  const response = await api.get(`/progress/${encodeURIComponent(jobId)}`, {
+    headers: { 'X-Job-Token': jobToken },
+  });
   return response.data;
 }
 
-export async function getJobResults(jobId) {
-  const response = await api.get(`/results/${encodeURIComponent(jobId)}`);
+export async function getJobResults(jobId, jobToken) {
+  const response = await api.get(`/results/${encodeURIComponent(jobId)}`, {
+    headers: { 'X-Job-Token': jobToken },
+  });
   return response.data;
 }
 
-export async function downloadReport(jobId) {
-  const response = await api.get(`/export/pdf/${encodeURIComponent(jobId)}`, { responseType: 'blob' });
+export async function downloadReport(jobId, jobToken) {
+  const response = await api.get(`/export/pdf/${encodeURIComponent(jobId)}`, {
+    responseType: 'blob',
+    headers: { 'X-Job-Token': jobToken },
+  });
   return response.data;
 }
 
