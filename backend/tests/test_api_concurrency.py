@@ -2,6 +2,7 @@
 import asyncio
 import io
 import unittest
+import hashlib
 from unittest.mock import patch
 
 from fastapi import HTTPException, UploadFile
@@ -70,18 +71,56 @@ class JobIsolationTests(unittest.IsolatedAsyncioTestCase):
         api._jobs["job-a"] = {
             "status": "done",
             "result": {"success": True, "stats": {"marker": "A"}},
+            "access_token_hash": hashlib.sha256(b"token-a").hexdigest(),
         }
         api._jobs["job-b"] = {
             "status": "done",
             "result": {"success": True, "stats": {"marker": "B"}},
+            "access_token_hash": hashlib.sha256(b"token-b").hexdigest(),
         }
 
-        result_a = await api.get_results_by_id("job-a")
-        result_b = await api.get_results_by_id("job-b")
+        result_a = await api.get_results_by_id("job-a", "token-a")
+        result_b = await api.get_results_by_id("job-b", "token-b")
 
         self.assertEqual(result_a["stats"]["marker"], "A")
         self.assertEqual(result_b["stats"]["marker"], "B")
         self.assertNotEqual(result_a, result_b)
+
+
+    async def test_missing_token_is_rejected(self):
+        api._jobs["protected"] = {
+            "status": "done",
+            "result": {"success": True},
+            "access_token_hash": hashlib.sha256(b"secret").hexdigest(),
+        }
+        with self.assertRaises(HTTPException) as raised:
+            await api.get_results_by_id("protected", None)
+        self.assertEqual(raised.exception.status_code, 401)
+
+    async def test_invalid_token_is_rejected(self):
+        api._jobs["protected"] = {
+            "status": "done",
+            "result": {"success": True},
+            "access_token_hash": hashlib.sha256(b"secret").hexdigest(),
+        }
+        with self.assertRaises(HTTPException) as raised:
+            await api.get_results_by_id("protected", "wrong-secret")
+        self.assertEqual(raised.exception.status_code, 403)
+
+    async def test_token_from_another_job_is_rejected(self):
+        api._jobs["job-a"] = {
+            "status": "done",
+            "result": {"success": True, "stats": {"marker": "A"}},
+            "access_token_hash": hashlib.sha256(b"token-a").hexdigest(),
+        }
+        with self.assertRaises(HTTPException) as raised:
+            await api.get_results_by_id("job-a", "token-b")
+        self.assertEqual(raised.exception.status_code, 403)
+
+    async def test_unknown_job_remains_not_found(self):
+        with self.assertRaises(HTTPException) as raised:
+            await api.get_results_by_id("missing-job", "any-token")
+        self.assertEqual(raised.exception.status_code, 404)
 
 
 if __name__ == "__main__":
