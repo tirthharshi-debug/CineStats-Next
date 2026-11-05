@@ -2,7 +2,7 @@
 API routes for the Letterboxd analytics application.
 Uses background processing with per-job state to support multiple simultaneous users.
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 import asyncio
 import traceback
@@ -10,6 +10,9 @@ import os
 import shutil
 import uuid
 import time
+import secrets
+import hashlib
+import hmac
 
 from app.services.file_service import (
     extract_zip, validate_letterboxd_export,
@@ -40,9 +43,10 @@ _admission_lock = asyncio.Lock()
 _accepted_jobs = 0
 
 
-def _new_job() -> tuple[str, dict]:
-    """Create a new job with a unique ID and return (job_id, job_state)."""
+def _new_job() -> tuple[str, dict, str]:
+    """Create a job and return its ID, state, and one-time access token."""
     job_id = uuid.uuid4().hex
+    job_token = secrets.token_urlsafe(32)
     job = {
         "status": "idle",        # idle | extracting | parsing | enriching | computing | done | error
         "current": 0,
@@ -53,16 +57,24 @@ def _new_job() -> tuple[str, dict]:
         "pro_stats": None,       # Available early (before TMDB)
         "created_at": time.time(),
         "finished_at": None,
+        # Store only a digest; the raw capability token is returned once to the client.
+        "access_token_hash": hashlib.sha256(job_token.encode("utf-8")).hexdigest(),
     }
     _jobs[job_id] = job
-    return job_id, job
+    return job_id, job, job_token
 
 
-def _get_job(job_id: str) -> dict:
-    """Look up a job by ID, raising 404 if not found."""
+def _get_job(job_id: str, job_token: str | None) -> dict:
+    """Look up a job and verify its per-job capability token."""
     job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if not job_token:
+        raise HTTPException(status_code=401, detail="A job access token is required")
+    supplied_hash = hashlib.sha256(job_token.encode("utf-8")).hexdigest()
+    expected_hash = job.get("access_token_hash", "")
+    if not expected_hash or not hmac.compare_digest(supplied_hash, expected_hash):
+        raise HTTPException(status_code=403, detail="Invalid job access token")
     return job
 
 
@@ -251,10 +263,15 @@ async def upload_zip(file: UploadFile = File(...)):
             await file.close()
 
         contents = b"".join(chunks)
-        job_id, job = _new_job()
+        job_id, job, job_token = _new_job()
         _ensure_cleanup_started()
         asyncio.create_task(_process_in_background(job_id, contents))
-        return {"success": True, "message": "Processing started", "job_id": job_id}
+        return {
+            "success": True,
+            "message": "Processing started",
+            "job_id": job_id,
+            "job_token": job_token,
+        }
     except Exception:
         # If no background job owns the reservation, release it here.
         if "job_id" not in locals():
@@ -264,9 +281,12 @@ async def upload_zip(file: UploadFile = File(...)):
 
 
 @router.get("/progress/{job_id}")
-async def get_progress_by_id(job_id: str):
-    """Get processing progress for a specific job."""
-    job = _get_job(job_id)
+async def get_progress_by_id(
+    job_id: str,
+    job_token: str | None = Header(default=None, alias="X-Job-Token"),
+):
+    """Get processing progress for a specific, token-authorized job."""
+    job = _get_job(job_id, job_token)
     resp = {
         "status": job["status"],
         "current": job["current"],
@@ -282,9 +302,12 @@ async def get_progress_by_id(job_id: str):
 
 
 @router.get("/results/{job_id}")
-async def get_results_by_id(job_id: str):
-    """Fetch final analytics for a specific job."""
-    job = _get_job(job_id)
+async def get_results_by_id(
+    job_id: str,
+    job_token: str | None = Header(default=None, alias="X-Job-Token"),
+):
+    """Fetch final analytics for a specific, token-authorized job."""
+    job = _get_job(job_id, job_token)
     if job["status"] == "done" and job["result"]:
         return job["result"]
     elif job["status"] == "error":
@@ -294,9 +317,12 @@ async def get_results_by_id(job_id: str):
 
 
 @router.get("/export/pdf/{job_id}")
-async def export_pdf_by_id(job_id: str):
-    """Generate and download a CineStats PDF summary for a specific job."""
-    job = _get_job(job_id)
+async def export_pdf_by_id(
+    job_id: str,
+    job_token: str | None = Header(default=None, alias="X-Job-Token"),
+):
+    """Generate a PDF summary for a specific, token-authorized job."""
+    job = _get_job(job_id, job_token)
     if job["status"] != "done" or not job["result"]:
         raise HTTPException(status_code=400, detail="No analysis data available. Upload and process a file first.")
 
