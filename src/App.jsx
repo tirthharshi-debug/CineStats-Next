@@ -108,18 +108,18 @@ function UploadModal({ onClose, onComplete }) {
     setUploadProgress(0);
     try {
       const started = await uploadLetterboxdExport(file, setUploadProgress);
-      if (!started?.job_id) throw new Error('The analysis service did not return a job ID.');
+      if (!started?.job_id || !started?.job_token) throw new Error('The analysis service did not return job access credentials.');
       setPhase('processing');
       let attempts = 0;
       while (!cancelled.current && attempts < 900) {
         attempts += 1;
-        const progress = await getJobProgress(started.job_id);
+        const progress = await getJobProgress(started.job_id, started.job_token);
         setJobProgress(progress);
         if (progress.status === 'error') throw new Error(progress.error || 'The analysis could not be completed.');
         if (progress.status === 'done') {
-          const result = await getJobResults(started.job_id);
+          const result = await getJobResults(started.job_id, started.job_token);
           if (!result?.stats) throw new Error('The CineStats analysis service returned no analytics data.');
-          onComplete(result, started.job_id);
+          onComplete(result, started.job_id, started.job_token);
           return;
         }
         await new Promise(resolve => window.setTimeout(resolve, 1300));
@@ -593,7 +593,7 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
   );
 }
 
-function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
+function AnalyticsDashboard({ data, jobId, jobToken, onImport, onHome }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [sharingTopFour, setSharingTopFour] = useState(false);
@@ -607,7 +607,7 @@ function AnalyticsDashboard({ data, jobId, onImport, onHome }) {
   const handlePdf = async () => {
     setDownloading(true); setDownloadError('');
     try {
-      const blob = await downloadReport(jobId);
+      const blob = await downloadReport(jobId, jobToken);
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url; anchor.download = 'CineStats-Your-Film-Life.pdf'; anchor.click();
@@ -817,14 +817,15 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [jobId, setJobId] = useState(null);
+  const [jobToken, setJobToken] = useState(null);
 
-  const onComplete = useCallback((data, id) => {
-    setDashboardData(data); setJobId(id); setShowImport(false);
+  const onComplete = useCallback((data, id, token) => {
+    setDashboardData(data); setJobId(id); setJobToken(token); setShowImport(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const goHome = () => {
-    setDashboardData(null); setJobId(null); window.scrollTo({ top: 0, behavior: 'smooth' });
+    setDashboardData(null); setJobId(null); setJobToken(null); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -838,7 +839,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header onImport={() => setShowImport(true)} onHome={goHome} dashboard={Boolean(dashboardData)} />
-      {dashboardData ? <motion.div className="dashboard-reveal" initial={{ opacity: 0, y: 34, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 1.65, ease: [0.16, 1, 0.3, 1], opacity: { duration: 1.15 }, scale: { duration: 1.65, ease: [0.16, 1, 0.3, 1] } }}><span className="dashboard-reveal-light" aria-hidden="true" /><AnalyticsDashboard data={dashboardData} jobId={jobId} onImport={() => setShowImport(true)} onHome={goHome} /></motion.div> : <LandingPage onImport={() => setShowImport(true)} />}
+      {dashboardData ? <motion.div className="dashboard-reveal" initial={{ opacity: 0, y: 34, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 1.65, ease: [0.16, 1, 0.3, 1], opacity: { duration: 1.15 }, scale: { duration: 1.65, ease: [0.16, 1, 0.3, 1] } }}><span className="dashboard-reveal-light" aria-hidden="true" /><AnalyticsDashboard data={dashboardData} jobId={jobId} jobToken={jobToken} onImport={() => setShowImport(true)} onHome={goHome} /></motion.div> : <LandingPage onImport={() => setShowImport(true)} />}
       <Footer onImport={() => setShowImport(true)} dashboard={Boolean(dashboardData)} />
       <AnimatePresence>{showImport ? <UploadModal onClose={() => setShowImport(false)} onComplete={onComplete} /> : null}</AnimatePresence>
     </div>
