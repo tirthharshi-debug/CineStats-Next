@@ -172,16 +172,17 @@ class TMDBConcurrencyTests(unittest.IsolatedAsyncioTestCase):
                     service.client = FakeClient(header_value)
                     service._request_count = 0
 
-                    with patch("app.services.tmdb_service.asyncio.sleep", new_callable=unittest.mock.AsyncMock) as mocked_sleep:
-                        result = await service._rate_limited_request(
-                            "https://example.test/resource", {}, retries=2
-                        )
+                    with patch.object(tmdb_service, "RATE_WINDOW", 0.001):
+                        with patch("app.services.tmdb_service.asyncio.sleep", new_callable=unittest.mock.AsyncMock) as mocked_sleep:
+                            result = await service._rate_limited_request(
+                                "https://example.test/resource", {}, retries=2
+                            )
 
-                    self.assertEqual(result, {"ok": True})
-                    self.assertEqual(service.client.calls, 2)
-                    self.assertIn(unittest.mock.call(expected_delay), mocked_sleep.await_args_list)
-                    # Drain scheduled token-release tasks before the next subtest.
-                    await asyncio.sleep(0.01)
+                        self.assertEqual(result, {"ok": True})
+                        self.assertEqual(service.client.calls, 2)
+                        self.assertIn(unittest.mock.call(expected_delay), mocked_sleep.await_args_list)
+                        # Drain scheduled token-release tasks before restoring globals.
+                        await asyncio.sleep(0.01)
         finally:
             tmdb_service._RATE_TOKENS = old_tokens
 
