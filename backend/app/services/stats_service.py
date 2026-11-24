@@ -592,34 +592,30 @@ def compute_community_comparison(enriched_movies: list[dict],
                                   ratings_df: pd.DataFrame) -> dict:
     """Compare user ratings vs TMDB community ratings (vote_average)."""
     comparisons = []
+    if ratings_df.empty or 'rating' not in ratings_df.columns:
+        return {"rated_higher": [], "rated_lower": []}
+
+    # Match on (title, year) so remakes and same-named films are not mixed up.
+    tmdb_lookup = _build_tmdb_lookup(enriched_movies)
     name_col = 'name' if 'name' in ratings_df.columns else 'title'
 
-    # Build lookup: title_lower -> user_rating
-    user_ratings = {}
-    if not ratings_df.empty and 'rating' in ratings_df.columns:
-        for _, row in ratings_df.iterrows():
-            title = str(row.get(name_col, '')).strip().lower()
-            r = row.get('rating')
-            if pd.notna(r):
-                user_ratings[title] = float(r)
-
-    for m in enriched_movies:
-        tmdb = m.get("tmdb")
-        if not tmdb:
+    for _, row in ratings_df.iterrows():
+        user_r = row.get('rating')
+        if pd.isna(user_r):
             continue
-        title = m.get("title", "")
-        user_r = user_ratings.get(title.strip().lower())
-        if user_r is None:
+        tmdb = _get_tmdb_for_row(row, tmdb_lookup)
+        if not tmdb:
             continue
         vote_avg = tmdb.get("vote_average")
         if vote_avg is None or vote_avg == 0:
             continue
 
+        user_r = float(user_r)
         tmdb_r_5 = round(float(vote_avg) / 2, 2)  # Convert 0-10 to 0-5
         diff = round(user_r - tmdb_r_5, 2)
 
         comparisons.append({
-            "title": tmdb.get("title", title),
+            "title": tmdb.get("title", str(row.get(name_col, ''))),
             "year": tmdb.get("year"),
             "poster_path": tmdb.get("poster_path"),
             "user_rating": user_r,
@@ -676,13 +672,8 @@ def compute_monthly_activity(enriched_movies: list[dict],
     month_names = ['January', 'February', 'March', 'April', 'May', 'June',
                    'July', 'August', 'September', 'October', 'November', 'December']
 
-    # Build TMDB lookup for posters
-    tmdb_lookup = {}
-    for m in enriched_movies:
-        tmdb = m.get("tmdb")
-        if tmdb:
-            key = m.get("title", "").strip().lower()
-            tmdb_lookup[key] = tmdb
+    # Build TMDB lookup for posters, keyed by (title, year)
+    tmdb_lookup = _build_tmdb_lookup(enriched_movies)
 
     valid = diary_df.dropna(subset=['watched_date']).copy()
     valid['year_month'] = valid['watched_date'].dt.to_period('M')
@@ -699,7 +690,7 @@ def compute_monthly_activity(enriched_movies: list[dict],
         for _, row in group.iterrows():
             title = str(row.get(name_col, ''))
             rating = row.get('rating')
-            tmdb = tmdb_lookup.get(title.strip().lower(), {})
+            tmdb = _get_tmdb_for_row(row, tmdb_lookup) or {}
             films_list.append({
                 "title": title,
                 "user_rating": float(rating) if pd.notna(rating) else None,
