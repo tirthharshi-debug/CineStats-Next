@@ -6,6 +6,7 @@ import unittest
 import zipfile
 from unittest.mock import patch
 
+import _env  # noqa: F401
 from app.services import file_service
 
 
@@ -87,6 +88,56 @@ class ZipExtractionTests(unittest.TestCase):
                 try:
                     with self.assertRaisesRegex(ValueError, "doesn't appear to be a valid Letterboxd export"):
                         file_service.validate_letterboxd_export(extracted)
+                finally:
+                    shutil.rmtree(extracted, ignore_errors=True)
+
+    def test_extracts_only_csv_files(self):
+        payload = make_zip([
+            ("diary.csv", "Date,Name,Year\n2024-01-01,Film,2000\n"),
+            ("cover.jpg", "not really an image"),
+            ("script.sh", "echo hi"),
+        ])
+        with tempfile.TemporaryDirectory() as root:
+            with patch.object(file_service, "UPLOAD_DIR", root):
+                extracted = file_service.extract_zip(payload)
+                try:
+                    self.assertEqual(os.listdir(extracted), ["diary.csv"])
+                finally:
+                    shutil.rmtree(extracted, ignore_errors=True)
+
+    def test_stops_writing_when_a_csv_exceeds_the_byte_cap(self):
+        payload = make_zip([("diary.csv", "x" * 5000)])
+        with tempfile.TemporaryDirectory() as root:
+            with patch.object(file_service, "UPLOAD_DIR", root), patch.object(file_service, "MAX_CSV_BYTES", 1000):
+                with self.assertRaisesRegex(ValueError, "expands beyond"):
+                    file_service.extract_zip(payload)
+                self.assertEqual(os.listdir(root), [])
+
+    def test_rejects_csv_with_too_many_rows(self):
+        rows = "Date,Name,Year\n" + "2024-01-01,Film,2000\n" * 50
+        payload = make_zip([("diary.csv", rows)])
+        with tempfile.TemporaryDirectory() as root:
+            with patch.object(file_service, "UPLOAD_DIR", root), patch.object(file_service, "MAX_CSV_ROWS", 10):
+                extracted = file_service.extract_zip(payload)
+                try:
+                    with self.assertRaisesRegex(ValueError, "more than"):
+                        file_service.parse_diary(extracted)
+                finally:
+                    shutil.rmtree(extracted, ignore_errors=True)
+
+    def test_unreadable_list_does_not_fail_the_export(self):
+        payload = make_zip([
+            ("diary.csv", "Date,Name,Year\n2024-01-01,Film,2000\n"),
+            ("lists/good.csv", "Position,Name,Year\n1,Film,2000\n"),
+            ("lists/preamble.csv", "Letterboxd list export v7\nDate,Name,Tags\n2024,x,y\n\nPosition,Name,Year\n1,A,2000\n"),
+            ("lists/empty.csv", ""),
+        ])
+        with tempfile.TemporaryDirectory() as root:
+            with patch.object(file_service, "UPLOAD_DIR", root):
+                extracted = file_service.extract_zip(payload)
+                try:
+                    lists = file_service.parse_lists(extracted)
+                    self.assertIn("Good", [item["name"] for item in lists])
                 finally:
                     shutil.rmtree(extracted, ignore_errors=True)
 
