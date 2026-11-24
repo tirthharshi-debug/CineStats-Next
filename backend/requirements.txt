@@ -1,10 +1,12 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-pandas
-numpy
-httpx
-python-multipart
-aiosqlite
-aiofiles
-reportlab
+# Runtime dependencies, pinned to the versions the test suite passes against.
+# Dependabot opens PRs for updates; CI runs pip-audit on every push.
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+python-dotenv==1.2.4
+pandas==3.0.6
+numpy==2.5.4
+httpx==0.28.1
+python-multipart==0.0.34
+aiosqlite==0.22.1
+aiofiles==25.1.0
+reportlab==5.0.1
