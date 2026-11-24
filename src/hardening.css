@@ -1,0 +1,8 @@
+/* ── Production hardening additions ── */
+.brand-fallback { display: inline-flex; align-items: center; gap: 9px; font: 600 20px var(--serif); letter-spacing: .01em; color: var(--ink); }
+.brand-fallback svg { color: var(--red-light); }
+.tmdb-attribution { margin: 18px 0 0; max-width: 760px; font: 10px/1.7 var(--mono); letter-spacing: .04em; color: var(--muted); }
+.route-loading { padding: 140px 0; text-align: center; font: 12px var(--mono); letter-spacing: .08em; color: var(--ink-soft); }
+.route-loading h1 { margin: 0 0 18px; font: 500 clamp(38px, 6vw, 64px)/1.05 var(--serif); color: var(--ink); }
+.route-loading h1 em { color: var(--red-light); }
+.route-loading p { max-width: 520px; margin: 0 auto 28px; line-height: 1.7; letter-spacing: .02em; }
