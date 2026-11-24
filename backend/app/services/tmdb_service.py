@@ -7,15 +7,19 @@ guarantees at most RATE_LIMIT_PER_WINDOW API requests in any 10-second window.
 """
 import httpx
 import asyncio
+import logging
 import os
 import re
-from dotenv import load_dotenv
-from app.database.db import get_cached_movie, cache_movie
+from app import config
+from app.database.db import get_cached_movie, cache_movie, is_recent_miss, record_miss
 
-# Load .env from project root
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".env"))
+logger = logging.getLogger("cinestats.tmdb")
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+# httpx logs every request URL at INFO level, and TMDB's v3 key travels in the
+# query string. Keep that logger quiet so the key can never land in log files.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
 # ─── Concurrency & rate-limit configuration ───
@@ -29,11 +33,17 @@ RATE_WINDOW = 1.0              # window size in seconds
 
 class TMDBService:
     def __init__(self):
-        self.api_key = TMDB_API_KEY
-        if not self.api_key:
-            raise ValueError("TMDB_API_KEY not found in environment variables.")
+        # Read at construction time so tests and deployments can set it late.
+        # TMDB_READ_ACCESS_TOKEN (v4 bearer token) is preferred: it keeps the
+        # credential out of URLs. TMDB_API_KEY (v3) still works as a fallback.
+        self.read_token = os.getenv("TMDB_READ_ACCESS_TOKEN") or None
+        self.api_key = os.getenv("TMDB_API_KEY") or None
+        if not (self.read_token or self.api_key):
+            raise ValueError("TMDB_API_KEY or TMDB_READ_ACCESS_TOKEN must be set.")
+        headers = {"Authorization": f"Bearer {self.read_token}"} if self.read_token else {}
         self.client = httpx.AsyncClient(
             timeout=30.0,
+            headers=headers,
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=40),
         )
         self._request_count = 0
@@ -55,7 +65,7 @@ class TMDBService:
         self._rate_tokens.release()
 
     async def _rate_limited_request(self, url: str, params: dict, retries: int = 3) -> dict | None:
-        """Make a rate-limited request with retry logic."""
+        """Make a rate-limited request, retrying only on transient failures."""
         for attempt in range(retries):
             try:
                 # Acquire a rate-limit token (blocks if window is full)
@@ -66,19 +76,23 @@ class TMDBService:
                 self._request_count += 1
 
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", 5))
+                    try:
+                        retry_after = min(30, max(1, int(response.headers.get("Retry-After", 5))))
+                    except ValueError:
+                        retry_after = 5
                     await asyncio.sleep(retry_after)
                     continue
 
-                response.raise_for_status()
-                return response.json()
-
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
-                    await asyncio.sleep(5 * (attempt + 1))
+                if response.status_code >= 500:
+                    await asyncio.sleep(2 * (attempt + 1))
                     continue
-                if attempt == retries - 1:
+
+                if response.status_code >= 400:
+                    # 401/404 and friends will not improve on retry.
+                    logger.warning("TMDB returned HTTP %s", response.status_code)
                     return None
+
+                return response.json()
 
             except (httpx.RequestError, httpx.TimeoutException):
                 if attempt == retries - 1:
@@ -86,6 +100,12 @@ class TMDBService:
                 await asyncio.sleep(2 * (attempt + 1))
 
         return None
+
+    def _auth_params(self, params: dict) -> dict:
+        """Add the v3 API key only when no bearer token is configured."""
+        if not self.read_token:
+            params = {**params, "api_key": self.api_key}
+        return params
 
     def _make_search_key(self, title: str, year: int | None) -> str:
         """Create a normalized search key from title + year."""
@@ -95,7 +115,7 @@ class TMDBService:
 
     async def search_movie(self, title: str, year: int | None = None) -> dict | None:
         """Search for a movie by title and optional year."""
-        params = {"api_key": self.api_key, "query": title}
+        params = self._auth_params({"query": title})
         if year:
             params["year"] = year
 
@@ -113,22 +133,49 @@ class TMDBService:
             if not data or not data.get("results"):
                 return None
 
-        # Best match: prefer exact title + year match
-        results = data["results"]
-        for r in results:
-            r_year = int(r.get("release_date", "0000")[:4]) if r.get("release_date") else None
-            if r.get("title", "").lower() == title.lower() and r_year == year:
-                return r
+        return self._pick_best_match(data["results"], title, year)
 
-        # Fallback: first result
+    @staticmethod
+    def _release_year(result: dict) -> int | None:
+        date = result.get("release_date") or ""
+        try:
+            return int(date[:4])
+        except ValueError:
+            return None
+
+    @classmethod
+    def _pick_best_match(cls, results: list[dict], title: str, year: int | None) -> dict:
+        """
+        Prefer an exact title + year match, then an exact title within one year
+        (festival vs. general release dates), then any result in that year range,
+        and only then fall back to TMDB's top result.
+        """
+        wanted = title.strip().lower()
+
+        def title_matches(r):
+            return wanted in (str(r.get("title", "")).lower(), str(r.get("original_title", "")).lower())
+
+        if year:
+            for r in results:
+                if title_matches(r) and cls._release_year(r) == year:
+                    return r
+            for r in results:
+                ry = cls._release_year(r)
+                if title_matches(r) and ry is not None and abs(ry - year) <= 1:
+                    return r
+            for r in results:
+                ry = cls._release_year(r)
+                if ry is not None and abs(ry - year) <= 1:
+                    return r
+        else:
+            for r in results:
+                if title_matches(r):
+                    return r
         return results[0]
 
     async def get_movie_details(self, tmdb_id: int) -> dict | None:
         """Fetch full movie details with credits."""
-        params = {
-            "api_key": self.api_key,
-            "append_to_response": "credits"
-        }
+        params = self._auth_params({"append_to_response": "credits"})
         return await self._rate_limited_request(
             f"{TMDB_BASE_URL}/movie/{tmdb_id}", params
         )
@@ -142,14 +189,19 @@ class TMDBService:
         if cached:
             return cached
 
+        if await is_recent_miss(search_key, config.TMDB_MISS_TTL_DAYS):
+            return None
+
         # 2. Search TMDB
         search_result = await self.search_movie(title, year)
         if not search_result:
+            await record_miss(search_key)
             return None
 
         tmdb_id = search_result["id"]
 
-        # 3. Fetch full details
+        # 3. Fetch full details. A failed request (network error, rate limit)
+        # is not remembered as a miss, so a later upload can try again.
         details = await self.get_movie_details(tmdb_id)
         if not details:
             return None
@@ -183,12 +235,16 @@ class TMDBService:
             except (ValueError, IndexError):
                 pass
 
+        # Credits are already distilled into directors/cast_members above, so the
+        # stored copy drops them to keep the cache small.
+        slim_details = {k: v for k, v in details.items() if k != "credits"}
+
         movie_data = {
             "tmdb_id": tmdb_id,
             "title": details.get("title", title),
             "year": release_year or year,
             "search_key": search_key,
-            "raw_details": details,
+            "raw_details": slim_details,
             "genres": genres,
             "directors": directors,
             "cast_members": cast_members,
@@ -202,10 +258,10 @@ class TMDBService:
             "popularity": details.get("popularity"),
         }
 
-        # 5. Cache it
+        # 5. Cache it, then hand back a copy without the bulky raw payload.
         await cache_movie(movie_data)
 
-        return movie_data
+        return {k: v for k, v in movie_data.items() if k != "raw_details"}
 
     async def enrich_batch(self, movies: list[dict], progress_callback=None) -> list[dict]:
         """

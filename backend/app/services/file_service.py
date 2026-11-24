@@ -11,17 +11,30 @@ import pandas as pd
 import re
 from datetime import datetime
 
+from app import config
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+UPLOAD_DIR = str(config.DATA_DIR / "uploads")
 
 # Guard against ZIP bombs and pathological archives on the memory-constrained service.
 MAX_ZIP_MEMBERS = 20_000
 MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024
+MAX_CSV_BYTES = 40 * 1024 * 1024      # per extracted CSV file
+MAX_CSV_ROWS = 200_000                # per parsed CSV file
+MAX_LIST_FILES = 200                  # custom lists parsed from lists/
 
 
 def extract_zip(file_bytes: bytes) -> str:
-    """Safely extract a bounded ZIP archive into a unique temporary directory."""
+    """
+    Safely extract the CSV files of a bounded ZIP archive into a unique
+    temporary directory.
+
+    Only ``.csv`` members are written to disk; everything else in the archive
+    is ignored. Every member's path is checked first, sizes are checked against
+    the declared values, and the bytes actually written are counted while
+    streaming so a lying ZIP header cannot bypass the limit.
+    """
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     extract_path = tempfile.mkdtemp(prefix="export_", dir=UPLOAD_DIR)
     try:
         with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
@@ -53,11 +66,50 @@ def extract_zip(file_bytes: bytes) -> str:
                 if stat.S_ISLNK(unix_mode):
                     raise ValueError("This ZIP archive contains a symbolic link and cannot be processed.")
 
-            zf.extractall(abs_extract, members=members)
+                if member.flag_bits & 0x1:
+                    raise ValueError("Password-protected ZIP archives are not supported.")
+
+            total_written = 0
+            for member in members:
+                if member.is_dir() or not member.filename.lower().endswith(".csv"):
+                    continue
+                target_path = os.path.abspath(os.path.join(abs_extract, member.filename))
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                written = 0
+                with zf.open(member) as source, open(target_path, "wb") as target:
+                    while True:
+                        chunk = source.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        written += len(chunk)
+                        total_written += len(chunk)
+                        if written > MAX_CSV_BYTES or total_written > MAX_UNCOMPRESSED_SIZE:
+                            raise ValueError(
+                                "This archive expands beyond the 100 MB processing limit. "
+                                "Please upload the original Letterboxd export."
+                            )
+                        target.write(chunk)
         return abs_extract
     except Exception:
         shutil.rmtree(extract_path, ignore_errors=True)
         raise
+
+
+def _read_csv(path: str, **kwargs) -> pd.DataFrame:
+    """Read a CSV with a hard row cap so a huge file cannot exhaust memory."""
+    df = pd.read_csv(
+        path,
+        encoding="utf-8-sig",
+        encoding_errors="replace",
+        nrows=MAX_CSV_ROWS + 1,
+        **kwargs,
+    )
+    if len(df) > MAX_CSV_ROWS:
+        raise ValueError(
+            f"One of the files in this export has more than {MAX_CSV_ROWS:,} rows, "
+            "which is beyond what CineStats can process."
+        )
+    return df
 
 
 def _find_csv(extract_path: str, name: str) -> str | None:
@@ -105,7 +157,7 @@ def validate_letterboxd_export(extract_path: str) -> None:
     has_movie_data = False
     for name, path in found_csvs.items():
         try:
-            df = pd.read_csv(path, nrows=5)  # peek at first 5 rows only
+            df = pd.read_csv(path, nrows=5, encoding="utf-8-sig", encoding_errors="replace")  # peek only
             if df.empty:
                 continue
             # Normalize columns for comparison
@@ -126,7 +178,7 @@ def parse_diary(extract_path: str) -> pd.DataFrame:
     if not path:
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = _read_csv(path)
     # Normalize column names
     df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
 
@@ -161,7 +213,7 @@ def parse_ratings(extract_path: str) -> pd.DataFrame:
     if not path:
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = _read_csv(path)
     df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
 
     if 'rating' in df.columns:
@@ -180,7 +232,7 @@ def parse_watched(extract_path: str) -> pd.DataFrame:
     if not path:
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = _read_csv(path)
     df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
 
     if 'date' in df.columns:
@@ -197,7 +249,7 @@ def parse_watchlist(extract_path: str) -> pd.DataFrame:
     if not path:
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = _read_csv(path)
     df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
 
     if 'year' in df.columns:
@@ -207,23 +259,32 @@ def parse_watchlist(extract_path: str) -> pd.DataFrame:
 
 
 def parse_lists(extract_path: str) -> list[dict]:
-    """Parse all list CSV files from Letterboxd export."""
+    """
+    Parse custom list CSV files from a Letterboxd export.
+
+    List files begin with a short metadata preamble before their real header
+    row, which a plain CSV parser can choke on. Lists are optional extras, so
+    one unreadable list is skipped instead of failing the whole analysis.
+    """
     lists_dir = os.path.join(extract_path, "lists")
     if not os.path.isdir(lists_dir):
         return []
 
     all_lists = []
-    for fname in os.listdir(lists_dir):
-        if fname.endswith('.csv'):
-            list_path = os.path.join(lists_dir, fname)
-            df = pd.read_csv(list_path)
-            df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
-            list_name = fname.replace('.csv', '').replace('-', ' ').replace('_', ' ').title()
-            all_lists.append({
-                "name": list_name,
-                "count": len(df),
-                "films": df.to_dict(orient='records')
-            })
+    list_files = sorted(f for f in os.listdir(lists_dir) if f.lower().endswith('.csv'))
+    for fname in list_files[:MAX_LIST_FILES]:
+        list_path = os.path.join(lists_dir, fname)
+        try:
+            df = _read_csv(list_path, on_bad_lines="skip")
+        except Exception:
+            continue
+        df.columns = [str(c).strip().lower().replace(' ', '_') for c in df.columns]
+        list_name = fname[:-4].replace('-', ' ').replace('_', ' ').title()
+        all_lists.append({
+            "name": list_name,
+            "count": len(df),
+            "films": df.to_dict(orient='records')
+        })
 
     return all_lists
 
