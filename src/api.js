@@ -11,11 +11,12 @@ const EXPORT_TIMEOUT_MS = 90_000;
 // Every job endpoint requires the secret token returned by the upload call.
 const withToken = (token, extra = {}) => ({ ...extra, headers: { 'X-Job-Token': token } });
 
-export async function uploadLetterboxdExport(file, onUploadProgress) {
+export async function uploadLetterboxdExport(file, onUploadProgress, signal) {
   const body = new FormData();
   body.append('file', file);
   const response = await api.post('/upload', body, {
     timeout: UPLOAD_TIMEOUT_MS,
+    signal,
     onUploadProgress(event) {
       if (event.total && onUploadProgress) {
         onUploadProgress(Math.round((event.loaded / event.total) * 100));

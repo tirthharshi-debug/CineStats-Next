@@ -140,10 +140,10 @@ def generate_pdf(stats_data: dict) -> BytesIO:
         ov.append(["Average Runtime", str(ra.get("average_runtime", 0)) + " min"])
         lf = ra.get("longest_film")
         if lf:
-            ov.append(["Longest Film", lf["title"] + " (" + str(lf["runtime"]) + "m)"])
+            ov.append(["Longest Film", str(lf.get("title", "-")) + " (" + str(lf.get("runtime", 0)) + "m)"])
         sf = ra.get("shortest_film")
         if sf:
-            ov.append(["Shortest Film", sf["title"] + " (" + str(sf["runtime"]) + "m)"])
+            ov.append(["Shortest Film", str(sf.get("title", "-")) + " (" + str(sf.get("runtime", 0)) + "m)"])
     fw = basic.get("first_watched")
     if fw:
         ov.append(["First Film", fw.get("title", "-")])

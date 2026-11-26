@@ -13,10 +13,11 @@ import os
 import shutil
 import time
 import uuid
+import weakref
 import zipfile
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app import config, security
@@ -24,7 +25,7 @@ from app.services import job_store
 from app.services.file_service import (
     extract_zip, validate_letterboxd_export,
     parse_diary, parse_ratings, parse_watched,
-    parse_watchlist, parse_lists, get_unique_movies, parse_profile_favorites
+    parse_lists, get_unique_movies, parse_profile_favorites
 )
 from app.services.tmdb_service import TMDBService
 from app.services.stats_service import (
@@ -43,7 +44,18 @@ router = APIRouter()
 _jobs: dict[str, dict] = {}
 _background_tasks: set[asyncio.Task] = set()
 
-ACTIVE_STATUSES = {"idle", "extracting", "parsing", "enriching", "computing"}
+RUNNING_STATUSES = {"idle", "extracting", "parsing", "enriching", "computing"}
+ACTIVE_STATUSES = RUNNING_STATUSES | {"queued"}
+_slot_conditions: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Condition] = weakref.WeakKeyDictionary()
+
+
+def _get_slot_condition() -> asyncio.Condition:
+    loop = asyncio.get_running_loop()
+    cond = _slot_conditions.get(loop)
+    if cond is None:
+        cond = asyncio.Condition()
+        _slot_conditions[loop] = cond
+    return cond
 GENERIC_FAILURE = (
     "The archive could not be processed. Check that it is a valid "
     "Letterboxd export and try again."
@@ -72,8 +84,21 @@ def _json_safe(value):
     return value
 
 
-def _active_job_count() -> int:
-    return sum(job["status"] in ACTIVE_STATUSES for job in _jobs.values())
+def _running_job_count(exclude_job_id: str | None = None) -> int:
+    return sum(
+        job["status"] in RUNNING_STATUSES and jid != exclude_job_id
+        for jid, job in _jobs.items()
+    )
+
+
+def _queued_job_count() -> int:
+    return sum(job["status"] == "queued" for job in _jobs.values())
+
+
+def _slots_exhausted() -> bool:
+    if config.MAX_ACTIVE_JOBS <= 0:
+        return True
+    return _running_job_count() >= config.MAX_ACTIVE_JOBS and _queued_job_count() >= config.MAX_QUEUED_JOBS
 
 
 def _new_job() -> tuple[str, str, dict]:
@@ -158,8 +183,24 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
     """Run the full pipeline in the background for a specific job."""
     job = _jobs[job_id]
     extract_path = None
+    condition = _get_slot_condition()
     try:
-        job["status"] = "extracting"
+        deadline = time.monotonic() + config.QUEUE_WAIT_TIMEOUT_SECONDS
+        async with condition:
+            while _running_job_count(exclude_job_id=job_id) >= config.MAX_ACTIVE_JOBS:
+                if job["status"] != "queued":
+                    job["status"] = "queued"
+                    await _persist(job_id, job)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError(
+                        "CineStats is busy right now and the wait queue timed out. Please try again shortly."
+                    )
+                try:
+                    await asyncio.wait_for(condition.wait(), timeout=min(remaining, 2.0))
+                except asyncio.TimeoutError:
+                    continue
+            job["status"] = "extracting"
 
         # 1. Extract ZIP (CPU + disk work: keep it off the event loop)
         extract_path = await asyncio.to_thread(extract_zip, file_bytes)
@@ -173,7 +214,6 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         diary_df = await asyncio.to_thread(parse_diary, extract_path)
         ratings_df = await asyncio.to_thread(parse_ratings, extract_path)
         watched_df = await asyncio.to_thread(parse_watched, extract_path)
-        watchlist_df = await asyncio.to_thread(parse_watchlist, extract_path)
         lists_data = await asyncio.to_thread(parse_lists, extract_path)
         favorite_urls = await asyncio.to_thread(parse_profile_favorites, extract_path)
 
@@ -200,7 +240,7 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
 
         try:
             enriched = await tmdb_service.enrich_batch(unique_movies, update_progress)
-            favorite_films = await tmdb_service.enrich_favorite_films(favorite_urls)
+            favorite_films = await tmdb_service.enrich_favorite_films(favorite_urls) if favorite_urls else []
         finally:
             await tmdb_service.close()
 
@@ -265,6 +305,8 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         if extract_path and os.path.isdir(extract_path):
             shutil.rmtree(extract_path, ignore_errors=True)
         await _persist(job_id, job)
+        async with condition:
+            condition.notify_all()
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────────────────────────
@@ -282,7 +324,7 @@ async def upload_zip(file: UploadFile = File(...)):
         await file.close()
         raise HTTPException(status_code=400, detail="Please upload a .zip file exported from Letterboxd")
 
-    if _active_job_count() >= config.MAX_ACTIVE_JOBS:
+    if _slots_exhausted():
         await file.close()
         raise HTTPException(
             status_code=429,
@@ -310,8 +352,9 @@ async def upload_zip(file: UploadFile = File(...)):
         await file.close()
 
     contents = b"".join(chunks)
+    chunks.clear()
     # Re-check after reading to close the race between simultaneous uploads.
-    if _active_job_count() >= config.MAX_ACTIVE_JOBS:
+    if _slots_exhausted():
         raise HTTPException(
             status_code=429,
             detail="CineStats is processing other archives. Please try again shortly.",
@@ -319,6 +362,8 @@ async def upload_zip(file: UploadFile = File(...)):
         )
 
     job_id, token, job = _new_job()
+    if _running_job_count(exclude_job_id=job_id) >= config.MAX_ACTIVE_JOBS:
+        job["status"] = "queued"
     await _persist(job_id, job)
     task = asyncio.create_task(_process_in_background(job_id, contents))
     _background_tasks.add(task)  # hold a reference so the task is not garbage-collected
@@ -361,11 +406,15 @@ async def export_pdf_by_id(authorized: tuple = Depends(_authorized_job)):
 
     from app.services.export_service import generate_pdf
     pdf_buffer = await run_in_threadpool(generate_pdf, job["result"])
+    try:
+        pdf_bytes = pdf_buffer.getvalue()
+    finally:
+        pdf_buffer.close()
 
-    return StreamingResponse(
-        pdf_buffer,
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=CineStats_Report.pdf"}
+        headers={"Content-Disposition": "attachment; filename=CineStats_Report.pdf"},
     )
 
 

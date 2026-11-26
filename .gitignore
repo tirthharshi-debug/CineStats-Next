@@ -5,6 +5,15 @@ dist/
 !.env.example
 .DS_Store
 coverage/
+.coverage
 *.log
+*.db*
+*.sqlite*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.tmp
+*.bak
 .vscode/
 .idea/
+CineStats-Next-audit/

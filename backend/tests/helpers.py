@@ -75,5 +75,8 @@ class FakeTMDBService:
                 await progress_callback(i, len(movies))
         return results
 
+    async def enrich_favorite_films(self, favorite_urls):
+        return []
+
     async def close(self):
         return None

@@ -77,8 +77,12 @@ function UploadModal({ onClose, onComplete }) {
   const [error, setError] = useState('');
   const inputRef = useRef(null);
   const cancelled = useRef(false);
+  const uploadController = useRef(null);
 
-  useEffect(() => () => { cancelled.current = true; }, []);
+  useEffect(() => () => {
+    cancelled.current = true;
+    uploadController.current?.abort();
+  }, []);
 
   const working = phase === 'uploading' || phase === 'processing';
   useEffect(() => {
@@ -104,11 +108,14 @@ function UploadModal({ onClose, onComplete }) {
   const processFile = async () => {
     if (!file || phase === 'uploading' || phase === 'processing') return;
     cancelled.current = false;
+    uploadController.current?.abort();
+    const controller = new AbortController();
+    uploadController.current = controller;
     setError('');
     setPhase('uploading');
     setUploadProgress(0);
     try {
-      const started = await uploadLetterboxdExport(file, setUploadProgress);
+      const started = await uploadLetterboxdExport(file, setUploadProgress, controller.signal);
       if (!started?.job_id || !started?.job_token) throw new Error('The analysis service did not return a job ID.');
       const { job_id: jobId, job_token: jobToken } = started;
       setPhase('processing');
@@ -140,10 +147,12 @@ function UploadModal({ onClose, onComplete }) {
       }
       if (!cancelled.current) throw new Error('This analysis is taking longer than expected. Please try again.');
     } catch (err) {
-      if (!cancelled.current) {
+      if (!cancelled.current && err?.code !== 'ERR_CANCELED') {
         setError(describeApiError(err, 'Something went wrong while reading your archive.'));
         setPhase('idle');
       }
+    } finally {
+      uploadController.current = null;
     }
   };
 
@@ -205,14 +214,14 @@ function UploadModal({ onClose, onComplete }) {
               <span className="projector-glint" />
               <div className="intermission-caption">A PERSONAL CINEMATHEQUE <span>·</span> FRAMES IN MOTION</div>
             </div>
-            <span className="eyebrow"><span className="live-dot" /> {phase === 'uploading' ? 'THE REEL IS ARRIVING' : jobProgress.status === 'enriching' ? 'IN THE CUTTING ROOM' : 'READING YOUR FILM DIARY'}</span>
-            <h3 key={phase === 'uploading' ? 'uploading' : messageIndex} className="intermission-title">{phase === 'uploading' ? 'Getting your archive on screen.' : intermission.title}</h3>
-            <p className="intermission-note">{phase === 'uploading' ? 'Sending your Letterboxd export to the analysis service.' : intermission.note}</p>
+            <span className="eyebrow"><span className="live-dot" /> {phase === 'uploading' ? 'THE REEL IS ARRIVING' : jobProgress.status === 'queued' ? 'IN THE SCREENING QUEUE' : jobProgress.status === 'enriching' ? 'IN THE CUTTING ROOM' : 'READING YOUR FILM DIARY'}</span>
+            <h3 key={phase === 'uploading' ? 'uploading' : jobProgress.status === 'queued' ? 'queued' : messageIndex} className="intermission-title">{phase === 'uploading' ? 'Getting your archive on screen.' : jobProgress.status === 'queued' ? 'Waiting for an open projector.' : intermission.title}</h3>
+            <p className="intermission-note">{phase === 'uploading' ? 'Sending your Letterboxd export to the analysis service.' : jobProgress.status === 'queued' ? 'CineStats is finishing another archive ahead of yours. Your upload is queued and will start automatically.' : intermission.note}</p>
             <div className="intermission-stage"><span className={phase === 'uploading' ? 'stage-active' : 'stage-done'}>01 <i>THE EXPORT</i></span><span className={phase === 'processing' ? 'stage-active' : ''}>02 <i>THE ARCHIVE</i></span><span>03 <i>THE REVEAL</i></span></div>
             <div className="progress-track"><span style={{ width: (phase === 'uploading' ? uploadProgress : movieCount) + '%' }} /></div>
-            <div className="progress-label"><span>{phase === 'uploading' ? uploadProgress + '% uploaded' : (jobProgress.current + ' / ' + jobProgress.total + ' titles enriched')}</span><span>{phase === 'processing' && movieCount ? movieCount + '%' : ''}</span></div>
+            <div className="progress-label"><span>{phase === 'uploading' ? uploadProgress + '% uploaded' : jobProgress.status === 'queued' ? 'Queued — starting automatically' : (jobProgress.current + ' / ' + jobProgress.total + ' titles enriched')}</span><span>{phase === 'processing' && movieCount ? movieCount + '%' : ''}</span></div>
             {error ? <p className="form-error"><AlertCircle size={15} /> {error}</p> : null}
-            <button className="text-button" onClick={() => { cancelled.current = true; setPhase('idle'); setError('Processing stopped in this window. The server job may continue until it expires.'); }}>Stop waiting <ArrowRight size={14} /></button>
+            <button className="text-button" onClick={() => { cancelled.current = true; uploadController.current?.abort(); setPhase('idle'); setError('Processing stopped in this window. The server job may continue until it expires.'); }}>Stop waiting <ArrowRight size={14} /></button>
           </div>
         )}
       </motion.section>

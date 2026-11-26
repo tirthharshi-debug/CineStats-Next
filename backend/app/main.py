@@ -38,6 +38,10 @@ def _validate_production_settings() -> None:
         problems.append("CORS_ALLOWED_ORIGINS still contains a localhost origin")
     if problems:
         raise RuntimeError("Invalid production configuration: " + "; ".join(problems))
+    if config.TRUSTED_PROXY_HOPS == 0:
+        logger.warning(
+            "TRUSTED_PROXY_HOPS is 0 in production; per-IP rate limiting will see the proxy IP instead of client IPs"
+        )
 
 
 @asynccontextmanager
@@ -56,7 +60,11 @@ async def lifespan(app: FastAPI):
         "loaded" if (os.getenv("TMDB_API_KEY") or os.getenv("TMDB_READ_ACCESS_TOKEN")) else "MISSING",
     )
     yield
-    cleanup_task.cancel()
+    pending = [cleanup_task, *list(api._background_tasks)]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
     logger.info("Shutting down")
 
 

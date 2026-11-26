@@ -146,6 +146,36 @@ class LimitTests(ApiTestCase):
         with patch.object(config, "MAX_ACTIVE_JOBS", 0):
             self.assertEqual(self.upload().status_code, 429)
 
+    def test_queued_job_runs_and_full_queue_returns_429(self):
+        from app.routes import api
+        api._jobs["active_dummy"] = {
+            "status": "enriching", "current": 0, "total": 1,
+            "result": None, "error": None, "token_hash": "h",
+            "created_at": time.time(), "finished_at": None,
+        }
+        try:
+            with patch.object(config, "MAX_ACTIVE_JOBS", 1), patch.object(config, "MAX_QUEUED_JOBS", 1):
+                queued_resp = self.upload()
+                self.assertEqual(queued_resp.status_code, 200)
+                queued = queued_resp.json()
+                prog = self.client.get(
+                    f"/api/progress/{queued['job_id']}",
+                    headers={"X-Job-Token": queued["job_token"]},
+                )
+                self.assertEqual(prog.status_code, 200)
+                self.assertEqual(prog.json()["status"], "queued")
+
+                # Queue is now full (1 active + 1 queued): next upload gets 429.
+                full_resp = self.upload()
+                self.assertEqual(full_resp.status_code, 429)
+
+                # Release the active slot and verify the queued job finishes.
+                api._jobs.pop("active_dummy", None)
+                done = wait_for(self.client, queued["job_id"], queued["job_token"])
+                self.assertEqual(done["status"], "done")
+        finally:
+            api._jobs.pop("active_dummy", None)
+
 
 class HeaderTests(ApiTestCase):
     def test_security_headers_on_api_responses(self):

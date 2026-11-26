@@ -128,7 +128,7 @@ def parse_profile_favorites(extract_path: str) -> list[str]:
         return []
 
     try:
-        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+        df = _read_csv(path, dtype=str, keep_default_na=False)
     except (OSError, ValueError, pd.errors.ParserError):
         return []
 
@@ -147,6 +147,8 @@ def parse_profile_favorites(extract_path: str) -> list[str]:
             if url not in seen:
                 seen.add(url)
                 favorites.append(url)
+                if len(favorites) >= 4:
+                    return favorites
     return favorites
 
 

@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowRight, CalendarDays, Clock3, Download,
-  Film, LoaderCircle, Share2, Sparkles, Star, Upload,
+  Film, LoaderCircle, Share2, Sparkles, Star, Trash2, Upload,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { describeApiError, downloadReport } from './api';
+import { deleteJob, describeApiError, downloadReport } from './api';
 
 function Metric({ label, value, note, symbol }) {
   return <div className="metric-card"><div className="metric-top"><span>{label}</span><span className="metric-symbol">{symbol}</span></div><div className="metric-value">{value ?? '—'}</div>{note ? <div className="metric-note">{note}</div> : null}</div>;
@@ -325,6 +325,7 @@ function EmptyChart({ note }) {
 
 export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, onHome }) {
   const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [sharingTopFour, setSharingTopFour] = useState(false);
   const [shareError, setShareError] = useState('');
@@ -340,11 +341,28 @@ export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, on
       const blob = await downloadReport(jobId, jobToken);
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement('a');
-      anchor.href = url; anchor.download = 'CineStats-Your-Film-Life.pdf'; anchor.click();
+      anchor.href = url; anchor.download = 'CineStats-Your-Film-Life.pdf';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
       window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
     } catch (err) {
       setDownloadError(describeApiError(err, 'The report could not be generated. Please try again.'));
     } finally { setDownloading(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!jobId || !jobToken || deleting) return;
+    setDeleting(true);
+    setDownloadError('');
+    try {
+      await deleteJob(jobId, jobToken);
+      onHome();
+    } catch (err) {
+      setDownloadError(describeApiError(err, 'Your data could not be deleted. Please try again.'));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleShareTopFour = async () => {
@@ -459,7 +477,7 @@ export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, on
 
   return (
     <main className="dashboard section-shell">
-      <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
+      <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-outline" onClick={handleDelete} disabled={deleting || !jobId || !jobToken}>{deleting ? <LoaderCircle size={15} className="spin" /> : <Trash2 size={15} />}{deleting ? 'Deleting…' : 'Delete my data'}</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
       {downloadError ? <p className="form-error dashboard-error"><AlertCircle size={15} /> {downloadError}</p> : null}
       <div className="dashboard-rule"><span>THE JOURNAL AT A GLANCE</span><span>NOTHING HERE IS GUESSED</span></div>
       <div className="metric-grid">

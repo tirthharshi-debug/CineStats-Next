@@ -5,11 +5,13 @@ Concurrent enrichment: movies are processed in parallel using asyncio.gather,
 controlled by a concurrency semaphore and a sliding-window rate limiter that
 guarantees at most RATE_LIMIT_PER_WINDOW API requests in any 10-second window.
 """
-import httpx
 import asyncio
 import logging
 import os
 import re
+import weakref
+
+import httpx
 from app import config
 from app.database.db import get_cached_movie, cache_movie, is_recent_miss, record_miss
 
@@ -25,10 +27,34 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 # ─── Concurrency & rate-limit configuration ───
 # TMDB's legacy 40-req/10s limit was removed in 2019.
 # Current soft limits: ~40 requests/second, ~20 simultaneous connections per IP.
-# We target half the request limit for safe headroom.
-CONCURRENCY = 20               # max movies being enriched at the same time
-RATE_LIMIT_PER_WINDOW = 20     # max API requests per sliding window
+# We target 30 req/s shared across all active jobs for fast enrichment with safe headroom.
+CONCURRENCY = 30               # max movies being enriched at the same time per job
+RATE_LIMIT_PER_WINDOW = 30     # max API requests per sliding window across all active jobs
 RATE_WINDOW = 1.0              # window size in seconds
+
+# Shared per-event-loop rate-limit bucket so concurrent TMDBService instances
+# cannot exceed RATE_LIMIT_PER_WINDOW combined, while separate test event loops
+# remain isolated.
+_loop_rate_buckets: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, tuple[asyncio.Semaphore, set[asyncio.Task]]
+] = weakref.WeakKeyDictionary()
+
+
+def _get_shared_rate_bucket() -> tuple[asyncio.Semaphore, set[asyncio.Task]]:
+    loop = asyncio.get_running_loop()
+    bucket = _loop_rate_buckets.get(loop)
+    if bucket is None:
+        bucket = (asyncio.Semaphore(RATE_LIMIT_PER_WINDOW), set())
+        _loop_rate_buckets[loop] = bucket
+    return bucket
+
+
+async def _release_rate_token(semaphore: asyncio.Semaphore) -> None:
+    """Release a shared rate-limit token after the window elapses."""
+    try:
+        await asyncio.sleep(RATE_WINDOW)
+    finally:
+        semaphore.release()
 
 
 class TMDBService:
@@ -39,7 +65,7 @@ class TMDBService:
         self.read_token = os.getenv("TMDB_READ_ACCESS_TOKEN") or None
         self.api_key = os.getenv("TMDB_API_KEY") or None
         if not (self.read_token or self.api_key):
-            raise ValueError("TMDB_API_KEY or TMDB_READ_ACCESS_TOKEN must be set.")
+            raise RuntimeError("TMDB_API_KEY or TMDB_READ_ACCESS_TOKEN must be set.")
         headers = {"Authorization": f"Bearer {self.read_token}"} if self.read_token else {}
         self.client = httpx.AsyncClient(
             timeout=30.0,
@@ -51,26 +77,31 @@ class TMDBService:
         # Concurrency gate: at most CONCURRENCY movies enriched at once
         self._semaphore = asyncio.Semaphore(CONCURRENCY)
 
-        # Sliding-window rate limiter: at most RATE_LIMIT_PER_WINDOW API
-        # requests in any RATE_WINDOW-second period.  Each request acquires a
-        # token; a background task releases it after RATE_WINDOW seconds.
-        self._rate_tokens = asyncio.Semaphore(RATE_LIMIT_PER_WINDOW)
+        # Track release tasks created by this instance so close() can clean them up
+        # without cancelling other concurrent jobs' tasks.
+        self._release_tasks: set[asyncio.Task] = set()
 
     async def close(self):
+        tasks = list(self._release_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._release_tasks.clear()
         await self.client.aclose()
-
-    async def _release_rate_token(self):
-        """Release a rate-limit token after the window elapses."""
-        await asyncio.sleep(RATE_WINDOW)
-        self._rate_tokens.release()
 
     async def _rate_limited_request(self, url: str, params: dict, retries: int = 3) -> dict | None:
         """Make a rate-limited request, retrying only on transient failures."""
+        rate_tokens, shared_tasks = _get_shared_rate_bucket()
         for attempt in range(retries):
             try:
-                # Acquire a rate-limit token (blocks if window is full)
-                await self._rate_tokens.acquire()
-                asyncio.create_task(self._release_rate_token())
+                # Acquire a shared rate-limit token (blocks if window is full)
+                await rate_tokens.acquire()
+                task = asyncio.create_task(_release_rate_token(rate_tokens))
+                shared_tasks.add(task)
+                self._release_tasks.add(task)
+                task.add_done_callback(shared_tasks.discard)
+                task.add_done_callback(self._release_tasks.discard)
 
                 response = await self.client.get(url, params=params)
                 self._request_count += 1
@@ -180,12 +211,14 @@ class TMDBService:
         replaced with an unrelated highly-rated film.
         """
         from html import unescape
-        from urllib.parse import urlparse
+        from urllib.parse import urljoin, urlparse
 
         results = []
         allowed_hosts = {"boxd.it", "www.boxd.it", "letterboxd.com", "www.letterboxd.com"}
+        max_redirects = 3
+        max_html_bytes = 512 * 1024
 
-        for index, favorite_url in enumerate(favorite_urls):
+        for index, favorite_url in enumerate(favorite_urls[:4]):
             item = {
                 "favorite_url": favorite_url,
                 "position": index + 1,
@@ -196,32 +229,53 @@ class TMDBService:
                 "tmdb_id": None,
             }
             try:
-                parsed_input = urlparse(favorite_url)
-                if parsed_input.scheme != "https" or parsed_input.hostname not in allowed_hosts:
-                    results.append(item)
-                    continue
+                current_url = favorite_url
+                html_text = None
+                for _ in range(max_redirects + 1):
+                    parsed = urlparse(current_url)
+                    if parsed.scheme != "https" or parsed.hostname not in allowed_hosts:
+                        break
+                    async with self.client.stream(
+                        "GET",
+                        current_url,
+                        follow_redirects=False,
+                        headers={"User-Agent": "CineStats/1.0 (Letterboxd favourites import)"},
+                        timeout=15.0,
+                    ) as response:
+                        if response.is_redirect:
+                            location = response.headers.get("location")
+                            if not location:
+                                break
+                            current_url = urljoin(current_url, location)
+                            continue
+                        response.raise_for_status()
+                        final_url = urlparse(str(response.url))
+                        if final_url.scheme != "https" or final_url.hostname not in {"letterboxd.com", "www.letterboxd.com"}:
+                            break
+                        chunks = []
+                        total = 0
+                        async for chunk in response.aiter_bytes(16384):
+                            total += len(chunk)
+                            if total > max_html_bytes:
+                                chunks.append(chunk[: max_html_bytes - (total - len(chunk))])
+                                break
+                            chunks.append(chunk)
+                        html_text = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+                        break
 
-                response = await self.client.get(
-                    favorite_url,
-                    follow_redirects=True,
-                    headers={"User-Agent": "CineStats/1.0 (Letterboxd favourites import)"},
-                    timeout=15.0,
-                )
-                response.raise_for_status()
-                final_url = urlparse(str(response.url))
-                if final_url.hostname not in {"letterboxd.com", "www.letterboxd.com"}:
+                if not html_text:
                     results.append(item)
                     continue
 
                 title_match = re.search(
                     r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
-                    response.text,
+                    html_text,
                     flags=re.IGNORECASE,
                 )
                 if not title_match:
                     title_match = re.search(
                         r'<title[^>]*>(.*?)</title>',
-                        response.text,
+                        html_text,
                         flags=re.IGNORECASE | re.DOTALL,
                     )
                 page_title = unescape(title_match.group(1)).strip() if title_match else ""

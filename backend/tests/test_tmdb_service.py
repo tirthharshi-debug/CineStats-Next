@@ -40,7 +40,7 @@ class CredentialTests(unittest.TestCase):
 
     def test_missing_credentials_raise(self):
         with patch.dict("os.environ", {"TMDB_API_KEY": "", "TMDB_READ_ACCESS_TOKEN": ""}):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 TMDBService()
 
 

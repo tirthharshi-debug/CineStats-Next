@@ -4,8 +4,12 @@
 *.db
 *.db-shm
 *.db-wal
+*.sqlite*
 uploads/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.coverage
+*.log
 .venv/
 venv/

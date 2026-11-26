@@ -18,7 +18,7 @@ def compute_basic_stats(diary_df: pd.DataFrame, ratings_df: pd.DataFrame,
     # Total unique films — use watched.csv (canonical), fallback to diary
     source = watched_df if not watched_df.empty else diary_df
     name_col = 'name' if 'name' in source.columns else 'title'
-    total_films = source[name_col].nunique() if not source.empty else 0
+    total_films = source[name_col].nunique() if (not source.empty and name_col in source.columns) else 0
 
     # Diary stats
     total_diary_entries = len(diary_df) if not diary_df.empty else 0
@@ -233,8 +233,7 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
     if not primary_df.empty:
         name_col = 'name' if 'name' in primary_df.columns else 'title'
-        # Deduplicate by film name
-        unique_films = primary_df.drop_duplicates(subset=[name_col])
+        unique_films = primary_df.drop_duplicates(subset=[name_col]) if name_col in primary_df.columns else primary_df if name_col in primary_df.columns else primary_df
         for _, row in unique_films.iterrows():
             tmdb = _get_tmdb_for_row(row, tmdb_lookup)
             if not tmdb:
@@ -272,8 +271,8 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
     if not primary_df.empty:
         name_col = 'name' if 'name' in primary_df.columns else 'title'
-        unique_films = primary_df.drop_duplicates(subset=[name_col])
-        for _, row in unique_films.iterrows():
+        unique_films_dir = primary_df.drop_duplicates(subset=[name_col]) if name_col in primary_df.columns else primary_df
+        for _, row in unique_films_dir.iterrows():
             tmdb = _get_tmdb_for_row(row, tmdb_lookup)
             if not tmdb:
                 continue
@@ -437,8 +436,8 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
     if not primary_df.empty:
         name_col = 'name' if 'name' in primary_df.columns else 'title'
-        unique_films = primary_df.drop_duplicates(subset=[name_col])
-        for _, row in unique_films.iterrows():
+        unique_films_dir = primary_df.drop_duplicates(subset=[name_col]) if name_col in primary_df.columns else primary_df
+        for _, row in unique_films_dir.iterrows():
             tmdb = _get_tmdb_for_row(row, tmdb_lookup)
             rating = row.get('rating')
             if pd.notna(rating):
@@ -606,7 +605,13 @@ def compute_community_comparison(enriched_movies: list[dict],
     """Compare user ratings vs TMDB and surface the latest five-star diary films."""
     comparisons = []
     if ratings_df.empty or 'rating' not in ratings_df.columns:
-        return {"rated_higher": [], "rated_lower": []}
+        return {
+            "rated_higher": [],
+            "rated_lower": [],
+            "top_rated": [],
+            "latest_five_star": [],
+            "five_star_count": 0,
+        }
 
     # Match on (title, year) so remakes and same-named films are not mixed up.
     tmdb_lookup = _build_tmdb_lookup(enriched_movies)
@@ -615,14 +620,15 @@ def compute_community_comparison(enriched_movies: list[dict],
     # Ratings.csv is canonical for the total number of unique five-star films.
     user_ratings = {}
     five_star_titles = set()
-    if not ratings_df.empty and 'rating' in ratings_df.columns:
-        for _, row in ratings_df.iterrows():
-            title = str(row.get(name_col, '')).strip().lower()
-            r = row.get('rating')
-            if pd.notna(r):
-                user_ratings[title] = float(r)
-                if float(r) == 5.0 and title:
-                    five_star_titles.add(title)
+    for _, row in ratings_df.iterrows():
+        title = str(row.get(name_col, '')).strip().lower()
+        year = row.get('year')
+        year_val = int(year) if pd.notna(year) else None
+        r = row.get('rating')
+        if pd.notna(r) and title:
+            user_ratings[(title, year_val)] = float(r)
+            if float(r) == 5.0:
+                five_star_titles.add((title, year_val))
 
     # Diary entries are ordered by the date watched; deduplicate rewatches so
     # this reel shows the four most recently watched distinct five-star films.
@@ -638,13 +644,19 @@ def compute_community_comparison(enriched_movies: list[dict],
         for _, diary_row in valid_diary.iterrows():
             diary_title = str(diary_row.get(diary_name_col, '')).strip()
             title_key = diary_title.lower()
-            if not title_key or title_key in seen_five_star or user_ratings.get(title_key) != 5.0:
+            diary_year = diary_row.get('year')
+            diary_year_val = int(diary_year) if pd.notna(diary_year) else None
+            film_key = (title_key, diary_year_val)
+            rating_val = user_ratings.get(film_key)
+            if rating_val is None and diary_year_val is not None:
+                rating_val = user_ratings.get((title_key, None))
+            if not title_key or film_key in seen_five_star or rating_val != 5.0:
                 continue
-            seen_five_star.add(title_key)
+            seen_five_star.add(film_key)
             tmdb = _get_tmdb_for_row(diary_row, tmdb_lookup) or enriched_by_title.get(title_key) or {}
             latest_five_star.append({
                 "title": tmdb.get("title", diary_title),
-                "year": tmdb.get("year", diary_row.get("year")),
+                "year": tmdb.get("year", diary_year_val),
                 "poster_path": tmdb.get("poster_path"),
                 "user_rating": 5.0,
                 "watched_date": str(diary_row['watched_date'].date()) if hasattr(diary_row['watched_date'], 'date') else str(diary_row['watched_date']),
