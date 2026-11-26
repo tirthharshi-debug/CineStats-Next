@@ -24,11 +24,7 @@ from app.services import job_store
 from app.services.file_service import (
     extract_zip, validate_letterboxd_export,
     parse_diary, parse_ratings, parse_watched,
-<<<<<<< HEAD
-    parse_lists, get_unique_movies
-=======
     parse_watchlist, parse_lists, get_unique_movies, parse_profile_favorites
->>>>>>> origin/ui/top-four-poster-refresh
 )
 from app.services.tmdb_service import TMDBService
 from app.services.stats_service import (
@@ -174,19 +170,12 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         job["status"] = "parsing"
 
         # 2. Parse CSVs
-<<<<<<< HEAD
         diary_df = await asyncio.to_thread(parse_diary, extract_path)
         ratings_df = await asyncio.to_thread(parse_ratings, extract_path)
         watched_df = await asyncio.to_thread(parse_watched, extract_path)
+        watchlist_df = await asyncio.to_thread(parse_watchlist, extract_path)
         lists_data = await asyncio.to_thread(parse_lists, extract_path)
-=======
-        diary_df = parse_diary(extract_path)
-        ratings_df = parse_ratings(extract_path)
-        watched_df = parse_watched(extract_path)
-        watchlist_df = parse_watchlist(extract_path)
-        lists_data = parse_lists(extract_path)
-        favorite_urls = parse_profile_favorites(extract_path)
->>>>>>> origin/ui/top-four-poster-refresh
+        favorite_urls = await asyncio.to_thread(parse_profile_favorites, extract_path)
 
         # 3. Compute basic + pro stats immediately (no TMDB needed)
         basic_stats = await asyncio.to_thread(compute_basic_stats, diary_df, ratings_df, watched_df)
@@ -222,19 +211,11 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         advanced_stats = await asyncio.to_thread(compute_advanced_stats, enriched, diary_df, ratings_df)
 
         # 7. New feature stats
-<<<<<<< HEAD
-        community_comparison = await asyncio.to_thread(compute_community_comparison, enriched, ratings_df)
+        community_comparison = await asyncio.to_thread(compute_community_comparison, enriched, ratings_df, diary_df)
         binge_stats = await asyncio.to_thread(compute_binge_stats, diary_df)
         monthly_activity = await asyncio.to_thread(compute_monthly_activity, enriched, diary_df)
         decade_leaderboard = await asyncio.to_thread(
             compute_decade_leaderboard, enriched, pro_stats.get("_decade_ratings", {})
-=======
-        community_comparison = compute_community_comparison(enriched, ratings_df, diary_df)
-        binge_stats = compute_binge_stats(diary_df)
-        monthly_activity = compute_monthly_activity(enriched, diary_df)
-        decade_leaderboard = compute_decade_leaderboard(
-            enriched, pro_stats.get("_decade_ratings", {})
->>>>>>> origin/ui/top-four-poster-refresh
         )
         pro_stats.pop("_decade_ratings", None)  # internal helper data, not for clients
 

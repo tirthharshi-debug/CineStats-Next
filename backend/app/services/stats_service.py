@@ -612,11 +612,6 @@ def compute_community_comparison(enriched_movies: list[dict],
     tmdb_lookup = _build_tmdb_lookup(enriched_movies)
     name_col = 'name' if 'name' in ratings_df.columns else 'title'
 
-<<<<<<< HEAD
-    for _, row in ratings_df.iterrows():
-        user_r = row.get('rating')
-        if pd.isna(user_r):
-=======
     # Ratings.csv is canonical for the total number of unique five-star films.
     user_ratings = {}
     five_star_titles = set()
@@ -646,7 +641,7 @@ def compute_community_comparison(enriched_movies: list[dict],
             if not title_key or title_key in seen_five_star or user_ratings.get(title_key) != 5.0:
                 continue
             seen_five_star.add(title_key)
-            tmdb = enriched_by_title.get(title_key) or {}
+            tmdb = _get_tmdb_for_row(diary_row, tmdb_lookup) or enriched_by_title.get(title_key) or {}
             latest_five_star.append({
                 "title": tmdb.get("title", diary_title),
                 "year": tmdb.get("year", diary_row.get("year")),
@@ -657,16 +652,17 @@ def compute_community_comparison(enriched_movies: list[dict],
             if len(latest_five_star) == 4:
                 break
 
-    top_rated = [];
-    for m in enriched_movies:
-        tmdb = m.get("tmdb")
-        if not tmdb:
->>>>>>> origin/ui/top-four-poster-refresh
+    top_rated = []
+    for _, row in ratings_df.iterrows():
+        user_r = row.get('rating')
+        if pd.isna(user_r):
             continue
         tmdb = _get_tmdb_for_row(row, tmdb_lookup)
         if not tmdb:
             continue
 
+        user_r = float(user_r)
+        title = str(row.get(name_col, ''))
         film = {
             "title": tmdb.get("title", title),
             "year": tmdb.get("year"),
@@ -679,19 +675,11 @@ def compute_community_comparison(enriched_movies: list[dict],
         if vote_avg is None or vote_avg == 0:
             continue
 
-        user_r = float(user_r)
         tmdb_r_5 = round(float(vote_avg) / 2, 2)  # Convert 0-10 to 0-5
         diff = round(user_r - tmdb_r_5, 2)
 
         comparisons.append({
-<<<<<<< HEAD
-            "title": tmdb.get("title", str(row.get(name_col, ''))),
-            "year": tmdb.get("year"),
-            "poster_path": tmdb.get("poster_path"),
-            "user_rating": user_r,
-=======
             **film,
->>>>>>> origin/ui/top-four-poster-refresh
             "tmdb_rating": tmdb_r_5,
             "difference": diff,
         })
