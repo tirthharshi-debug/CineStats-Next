@@ -1,16 +1,16 @@
-# CineStats-Next
+# CineStats-Next 🎞️
 
 Letterboxd export analytics web app. Upload a Letterboxd `.zip` export, enrich film metadata via TMDB, explore interactive diary/rating/genre/director analytics, export a PNG Top Four share card or PDF report, and delete your data on demand.
 
-## What It Does
+## ✨ What It Does
 
-* **Diary & Rating Analytics:** Yearly watch history, 0.5–5.0★ rating distribution, genres and pairings, director/cast frequencies, total runtime, 365-day activity heatmap, binge days, monthly shelves, golden decades, crowd-rating diffs, and latest five-star films.
-* **Profile Top Four:** Parses `profile.csv` favourites in original order, resolves posters via TMDB, and renders a 1200×1850 PNG share card client-side.
-* **PDF Export:** Generates an A4 summary report (`ReportLab`) off the event loop.
-* **Bounded Upload Queue:** Active jobs (`MAX_ACTIVE_JOBS=2`) run concurrently; additional uploads enter a bounded `"queued"` state (`MAX_QUEUED_JOBS=3`, `QUEUE_WAIT_TIMEOUT_SECONDS=300`) instead of failing immediately, returning `429` (`Retry-After: 30`) only when both active slots and the queue are full.
-* **Job Isolation & Deletion:** Each upload receives a 32-hex `job_id` and a `secrets.token_urlsafe(32)` `X-Job-Token` (stored as SHA-256). Jobs expire after `JOB_TTL_SECONDS` (`1800`s) or can be deleted immediately via **Delete my data** (`DELETE /api/jobs/{job_id}`).
+* **📊 Diary & Rating Analytics:** Yearly watch history, 0.5–5.0★ rating distribution, genres and pairings, director/cast frequencies, total runtime, 365-day activity heatmap, binge days, monthly shelves, golden decades, crowd-rating diffs, and latest five-star films.
+* **🎬 Profile Top Four:** Parses `profile.csv` favourites in original order, resolves posters via TMDB, and renders a 1200×1850 PNG share card client-side.
+* **📄 PDF Export:** Generates an A4 summary report (`ReportLab`) off the event loop.
+* **⏳ Bounded Upload Queue:** Active jobs (`MAX_ACTIVE_JOBS=2`) run concurrently; additional uploads enter a bounded `"queued"` state (`MAX_QUEUED_JOBS=3`, `QUEUE_WAIT_TIMEOUT_SECONDS=300`) instead of failing immediately, returning `429` (`Retry-After: 30`) only when both active slots and the queue are full.
+* **🗑️ Job Isolation & Deletion:** Each upload receives a 32-hex `job_id` and a `secrets.token_urlsafe(32)` `X-Job-Token` (stored as SHA-256). Jobs expire after `JOB_TTL_SECONDS` (`1800`s) or can be deleted immediately via **Delete my data** (`DELETE /api/jobs/{job_id}`).
 
-## Stack & Architecture
+## 🛠️ Stack & Architecture
 
 * **Frontend:** React 19, Vite 7, Framer Motion, Recharts, Lucide, Axios (`src/`). The dashboard (`src/Dashboard.jsx`) and Recharts bundle are lazy-loaded after an analysis finishes.
 * **Backend:** FastAPI, Uvicorn, Pandas, NumPy, HTTPX, aiosqlite, ReportLab (`backend/app/`).
@@ -19,7 +19,7 @@ Letterboxd export analytics web app. Upload a Letterboxd `.zip` export, enrich f
 * **Input & Network Guards:** ZIP extraction checks member count (`20,000`), expanded size (`100 MB`), per-CSV size (`40 MB`), row count (`200,000`), path traversal, symlinks, and encryption, and deletes temp directories in `finally`. Profile favourite URLs are capped at 4 and resolved with `https`-only, hop-by-hop host-validated redirects and a 512 KB HTML limit.
 * **Single-Worker Note:** Live job progress, queue conditions, and per-IP rate limiters (`RateLimiter`) live in process memory. Run Uvicorn as a single worker process.
 
-## Project Layout
+## 📁 Project Layout
 
 ```text
 ├── .env.example              # Frontend env template (VITE_API_BASE_URL)
@@ -46,7 +46,7 @@ Letterboxd export analytics web app. Upload a Letterboxd `.zip` export, enrich f
     └── tests/                # unittest suite
 ```
 
-## Environment Variables
+## 🔐 Environment Variables
 
 Copy `.env.example` to `.env` (frontend) and `backend/.env.example` to `backend/.env` (backend). Never commit `.env` files.
 
@@ -60,7 +60,7 @@ Copy `.env.example` to `.env` (frontend) and `backend/.env.example` to `backend/
   * `DATA_DIR` (directory for SQLite DBs and temp `uploads/`; defaults to `backend/`, `/data` in Docker)
   * Tuning defaults: `MAX_UPLOAD_BYTES=10485760`, `MAX_ACTIVE_JOBS=2`, `MAX_QUEUED_JOBS=3`, `QUEUE_WAIT_TIMEOUT_SECONDS=300`, `MAX_UNIQUE_MOVIES=6000`, `JOB_TTL_SECONDS=1800`, `UPLOADS_PER_HOUR=20`, `POLLS_PER_MINUTE=300`, `EXPORTS_PER_MINUTE=10`, `TMDB_MISS_TTL_DAYS=7`
 
-## Local Setup
+## 🚀 Local Setup
 
 Requires Node.js `>= 20` and Python `3.11+`.
 
@@ -83,7 +83,7 @@ copy .env.example .env
 npm run dev
 ```
 
-## Tests & Build
+## 🧪 Tests & Build
 
 ```powershell
 # Backend unit tests (from backend/)
