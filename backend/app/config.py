@@ -1,7 +1,7 @@
 """
 Central runtime configuration, read from environment variables.
 
-Local development loads ``backend/.env``; production (Render) uses real
+Local development loads ``backend/.env``; production uses real
 environment variables. Nothing secret has a default value.
 """
 import logging
@@ -38,9 +38,7 @@ def _csv(name: str, default: str = "") -> list[str]:
 APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
 IS_PRODUCTION = APP_ENV == "production"
 
-# Where SQLite files and temporary uploads live. On Render, point this at a
-# persistent disk mount (for example /var/data) if you want the TMDB cache to
-# survive deploys. The cache is rebuildable, so an ephemeral disk is acceptable.
+# Directory for SQLite files and temporary uploads; point at a persistent disk in production if needed.
 DATA_DIR = Path(os.getenv("DATA_DIR") or BACKEND_DIR)
 
 CORS_ALLOWED_ORIGINS = _csv(

@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import re
+import unicodedata
 import weakref
 
 import httpx
@@ -24,13 +25,10 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
-# ─── Concurrency & rate-limit configuration ───
-# TMDB's legacy 40-req/10s limit was removed in 2019.
-# Current soft limits: ~40 requests/second, ~20 simultaneous connections per IP.
-# We target 30 req/s shared across all active jobs for fast enrichment with safe headroom.
-CONCURRENCY = 30               # max movies being enriched at the same time per job
-RATE_LIMIT_PER_WINDOW = 30     # max API requests per sliding window across all active jobs
-RATE_WINDOW = 1.0              # window size in seconds
+# Shared 30 req/s ceiling across active jobs (headroom below TMDB's ~40 req/s limit).
+CONCURRENCY = 30
+RATE_LIMIT_PER_WINDOW = 30
+RATE_WINDOW = 1.0
 
 # Shared per-event-loop rate-limit bucket so concurrent TMDBService instances
 # cannot exceed RATE_LIMIT_PER_WINDOW combined, while separate test event loops
@@ -169,40 +167,84 @@ class TMDBService:
     @staticmethod
     def _release_year(result: dict) -> int | None:
         date = result.get("release_date") or ""
-        try:
-            return int(date[:4])
-        except ValueError:
-            return None
+        if date:
+            try:
+                return int(str(date)[:4])
+            except ValueError:
+                pass
+        yr = result.get("year")
+        if isinstance(yr, int):
+            return yr
+        return None
+
+    @staticmethod
+    def _normalize_title(title: str) -> str:
+        text = unicodedata.normalize("NFKD", str(title or ""))
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        text = text.lower().replace("&", " and ")
+        text = re.sub(r"[^\w\s]", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def _strip_leading_article(norm_title: str) -> str:
+        for prefix in ("the ", "a ", "an "):
+            if norm_title.startswith(prefix) and len(norm_title) > len(prefix):
+                return norm_title[len(prefix):]
+        return norm_title
 
     @classmethod
-    def _pick_best_match(cls, results: list[dict], title: str, year: int | None) -> dict:
+    def _pick_best_match(cls, results: list[dict], title: str, year: int | None) -> dict | None:
         """
-        Prefer an exact title + year match, then an exact title within one year
-        (festival vs. general release dates), then any result in that year range,
-        and only then fall back to TMDB's top result.
+        Require normalized title equivalence (exact normalized title/original_title,
+        or article-stripped equivalence) and strict year matching when year is known.
+        Never falls back to unrelated substring or popularity-only matches.
         """
-        wanted = title.strip().lower()
+        norm_wanted = cls._normalize_title(title)
+        if not norm_wanted:
+            return None
+        art_wanted = cls._strip_leading_article(norm_wanted)
 
-        def title_matches(r):
-            return wanted in (str(r.get("title", "")).lower(), str(r.get("original_title", "")).lower())
+        def score(r: dict) -> tuple | None:
+            titles = [
+                cls._normalize_title(r.get("title", "")),
+                cls._normalize_title(r.get("original_title", "")),
+            ]
+            titles = [t for t in titles if t]
+            if not titles:
+                return None
 
-        if year:
-            for r in results:
-                if title_matches(r) and cls._release_year(r) == year:
-                    return r
-            for r in results:
-                ry = cls._release_year(r)
-                if title_matches(r) and ry is not None and abs(ry - year) <= 1:
-                    return r
-            for r in results:
-                ry = cls._release_year(r)
-                if ry is not None and abs(ry - year) <= 1:
-                    return r
-        else:
-            for r in results:
-                if title_matches(r):
-                    return r
-        return results[0]
+            is_exact = norm_wanted in titles
+            is_article = any(cls._strip_leading_article(t) == art_wanted for t in titles)
+            if not (is_exact or is_article):
+                return None
+
+            ry = cls._release_year(r)
+            if year is not None:
+                if ry == year:
+                    year_tier = 2
+                elif ry is not None and abs(ry - year) <= 1:
+                    year_tier = 1
+                elif ry is None and is_exact:
+                    year_tier = 0
+                else:
+                    return None
+            else:
+                year_tier = 1
+
+            title_tier = 2 if is_exact else 1
+            pop = float(r.get("popularity") or 0)
+            votes = float(r.get("vote_count") or 0)
+            return (title_tier, year_tier, pop, votes)
+
+        ranked = []
+        for r in results:
+            s = score(r)
+            if s is not None:
+                ranked.append((s, r))
+        if not ranked:
+            return None
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return ranked[0][1]
 
     async def enrich_favorite_films(self, favorite_urls: list[str]) -> list[dict]:
         """Resolve Letterboxd profile favourites to TMDB metadata without changing order.
@@ -295,6 +337,7 @@ class TMDBService:
                         "title": tmdb.get("title") or title,
                         "year": tmdb.get("year") or year,
                         "poster_path": tmdb.get("poster_path"),
+                        "backdrop_path": tmdb.get("backdrop_path"),
                         "tmdb_id": tmdb.get("tmdb_id"),
                         "resolved": True,
                     })
@@ -316,15 +359,15 @@ class TMDBService:
         """Full pipeline: check cache → search → fetch details → cache result."""
         search_key = self._make_search_key(title, year)
 
-        # 1. Check cache
+        # Re-validate cached rows against strict title/year matching so stale
+        # bad matches are automatically refreshed.
         cached = await get_cached_movie(search_key)
-        if cached:
+        if cached and self._pick_best_match([cached], title, year) is not None:
             return cached
 
         if await is_recent_miss(search_key, config.TMDB_MISS_TTL_DAYS):
             return None
 
-        # 2. Search TMDB
         search_result = await self.search_movie(title, year)
         if not search_result:
             await record_miss(search_key)
@@ -332,13 +375,11 @@ class TMDBService:
 
         tmdb_id = search_result["id"]
 
-        # 3. Fetch full details. A failed request (network error, rate limit)
-        # is not remembered as a miss, so a later upload can try again.
+        # Transient failures here are not recorded as misses so later uploads can retry.
         details = await self.get_movie_details(tmdb_id)
         if not details:
             return None
 
-        # 4. Extract structured data
         credits = details.get("credits", {})
         directors = [
             {"id": c["id"], "name": c["name"], "profile_path": c.get("profile_path")}
@@ -386,11 +427,11 @@ class TMDBService:
             "spoken_languages": spoken_langs,
             "release_date": details.get("release_date"),
             "poster_path": details.get("poster_path"),
+            "backdrop_path": details.get("backdrop_path"),
             "vote_average": details.get("vote_average"),
             "popularity": details.get("popularity"),
         }
 
-        # 5. Cache it, then hand back a copy without the bulky raw payload.
         await cache_movie(movie_data)
 
         return {k: v for k, v in movie_data.items() if k != "raw_details"}

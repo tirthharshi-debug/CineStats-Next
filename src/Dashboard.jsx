@@ -168,16 +168,89 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
           <div className="rich-grid rich-grid-two">
             <div className="data-panel genre-feature">
               <span className="eyebrow">YOUR SIGNATURE GENRE</span>
-              <h3>{genres.most_watched_genre || 'Still taking shape'}</h3>
-              <p>Your most frequently watched genre in the rated-film archive. A pattern, not a box to stay inside.</p>
-              {genres.favorite_genre?.name ? <div className="favorite-genre"><span>Highest-rated regular genre</span><strong>{genres.favorite_genre.name} <b><Star size={12} fill="currentColor" /> {Number(genres.favorite_genre.avg_rating).toFixed(2)}</b></strong><small>Based on genres with at least five rated films.</small></div> : null}
+              {genres.signature_film ? (
+                <div className="insight-film-row genre-film-row">
+                  <MiniPoster film={genres.signature_film} size="shelf" />
+                  <div>
+                    <h3>{genres.most_watched_genre || 'Still taking shape'}</h3>
+                    <p>Your most frequently watched genre in the rated-film archive. A pattern, not a box to stay inside.</p>
+                    <small className="genre-film-caption">
+                      Most visited: {genres.signature_film.title}
+                      {genres.signature_film.year ? ' (' + genres.signature_film.year + ')' : ''}
+                      {genres.signature_film.watch_count > 1 ? ' · ' + genres.signature_film.watch_count + ' watches' : ''}
+                    </small>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h3>{genres.most_watched_genre || 'Still taking shape'}</h3>
+                  <p>Your most frequently watched genre in the rated-film archive. A pattern, not a box to stay inside.</p>
+                </>
+              )}
+              {genres.favorite_genre?.name ? (
+                <div className="favorite-genre">
+                  {genres.favorite_genre.representative_film ? (
+                    <div className="insight-film-row genre-film-row">
+                      <MiniPoster film={genres.favorite_genre.representative_film} size="shelf" />
+                      <div className="favorite-genre-copy">
+                        <span className="eyebrow">HIGHEST-RATED REGULAR GENRE</span>
+                        <strong className="favorite-genre-title">{genres.favorite_genre.name} <b><Star size={13} fill="currentColor" /> {Number(genres.favorite_genre.avg_rating).toFixed(2)}</b></strong>
+                        <p className="favorite-genre-note">Based on genres with at least five rated films.</p>
+                        <small className="genre-film-caption">
+                          Top rated: {genres.favorite_genre.representative_film.title}
+                          {genres.favorite_genre.representative_film.year ? ' (' + genres.favorite_genre.representative_film.year + ')' : ''}
+                          {genres.favorite_genre.representative_film.rating != null ? ' · ' + Number(genres.favorite_genre.representative_film.rating).toFixed(1) + '★' : ''}
+                        </small>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="favorite-genre-copy">
+                      <span className="eyebrow">HIGHEST-RATED REGULAR GENRE</span>
+                      <strong className="favorite-genre-title">{genres.favorite_genre.name} <b><Star size={13} fill="currentColor" /> {Number(genres.favorite_genre.avg_rating).toFixed(2)}</b></strong>
+                      <p className="favorite-genre-note">Based on genres with at least five rated films.</p>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
             <DistributionList title="Most watched genres" data={genres.genre_distribution} suffix=" films" maxRows={9} />
             <RatingList title="How you rate each genre" data={genres.average_rating_per_genre} />
-            <div className="data-panel">
+            <div className="data-panel directors-cut-panel">
               <div className="data-panel-title"><span>THE DIRECTOR'S CUT</span><span className="eyebrow">TOP PAIRING</span></div>
-              <p className="editorial-note">{advanced.most_common_genre_combo?.length ? 'The most common genre pairing is ' + advanced.most_common_genre_combo[0][0] + ', appearing across ' + advanced.most_common_genre_combo[0][1] + ' enriched titles.' : 'Your film metadata will reveal recurring genre combinations here.'}</p>
-              {advanced.taste_profile?.length ? <div className="taste-tags">{advanced.taste_profile.map((tag, i) => <span key={i}>{tag}</span>)}</div> : null}
+              {(() => {
+                const combo = advanced.most_common_genre_combo?.[0];
+                const pairingNote = combo ? (
+                  <p className="editorial-note">
+                    The most common genre pairing is <strong className="combo-highlight">{combo[0]}</strong>, appearing across {combo[1]} enriched titles.
+                  </p>
+                ) : (
+                  <p className="editorial-note">Your film metadata will reveal recurring genre combinations here.</p>
+                );
+                const tags = advanced.taste_profile?.length ? (
+                  <div className="taste-tags">{advanced.taste_profile.map((tag, i) => <span key={i}>{tag}</span>)}</div>
+                ) : null;
+                return advanced.top_genre_combo_film ? (
+                  <div className="insight-film-row genre-film-row">
+                    <MiniPoster film={advanced.top_genre_combo_film} size="shelf" />
+                    <div className="combo-film-copy">
+                      {pairingNote}
+                      <small className="genre-film-caption">
+                        Most visited pairing: {advanced.top_genre_combo_film.title}
+                        {advanced.top_genre_combo_film.year ? ' (' + advanced.top_genre_combo_film.year + ')' : ''}
+                        {advanced.top_genre_combo_film.watch_count > 1
+                          ? ' · ' + advanced.top_genre_combo_film.watch_count + ' watches'
+                          : (advanced.top_genre_combo_film.rating != null ? ' · ' + Number(advanced.top_genre_combo_film.rating).toFixed(1) + '★' : '')}
+                      </small>
+                      {tags}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {pairingNote}
+                    {tags}
+                  </>
+                );
+              })()}
             </div>
           </div>
         ) : <div className="data-empty">Genre details appear when TMDB can match films in your archive. Your basic diary stats can still be read without a match.</div>}
@@ -206,8 +279,8 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
             <p>Roughly {Number(runtime.total_runtime_days || 0).toLocaleString()} full days of cinema, based on available runtime metadata for matched films.</p>
             <div className="runtime-facts">
               <div><span>Average feature</span><strong>{runtime.average_runtime ? Math.round(runtime.average_runtime) + ' min' : '—'}</strong></div>
-              <div><span>Longest film</span><strong>{runtime.longest_film?.title || '—'}</strong><small>{runtime.longest_film?.runtime ? runtime.longest_film.runtime + ' minutes' : ''}</small></div>
-              <div><span>Shortest film</span><strong>{runtime.shortest_film?.title || '—'}</strong><small>{runtime.shortest_film?.runtime ? runtime.shortest_film.runtime + ' minutes' : ''}</small></div>
+              <div><span>Longest film</span><div className="runtime-film-row"><MiniPoster film={runtime.longest_film} size="shelf" /><div><strong>{runtime.longest_film?.title || '—'}</strong><small>{runtime.longest_film?.runtime ? runtime.longest_film.runtime + ' minutes' : ''}</small></div></div></div>
+              <div><span>Shortest film</span><div className="runtime-film-row"><MiniPoster film={runtime.shortest_film} size="shelf" /><div><strong>{runtime.shortest_film?.title || '—'}</strong><small>{runtime.shortest_film?.runtime ? runtime.shortest_film.runtime + ' minutes' : ''}</small></div></div></div>
             </div>
           </div>
           <div className="data-panel">
@@ -234,19 +307,23 @@ function RichAnalytics({ patron = {}, advanced = {}, community = {}, binge = {},
       {monthly.length ? <section className="dash-section">
         <AnalyticsSectionHeading number="07" eyebrow="THE SCREENINGS THAT MADE THE YEARS" title={<>Month by <em>month.</em></>} note={monthly.length + ' months in the diary'} />
         <div className="monthly-shelves">
-          {monthly.slice(0, 8).map(month => (
-            <article className="monthly-shelf" key={String(month.year) + '-' + month.month}>
-              <div className="monthly-shelf-head">
-                <div><span className="eyebrow">{month.year}</span><h3>{month.month}</h3></div>
-                <div className="monthly-shelf-stats"><strong>{month.total_films}</strong><span>screenings</span><strong>{month.avg_rating ? Number(month.avg_rating).toFixed(1) + '★' : '—'}</strong><span>avg rating</span></div>
-              </div>
-              <div className="monthly-poster-row">
-                {(month.films || []).slice(0, 4).map((film, i) => <div className="monthly-poster" key={film.title + '-' + i} title={film.title}><MiniPoster film={film} size="shelf" /><span>{film.title}</span></div>)}
-                {!(month.films || []).length ? <p className="data-empty">No matched posters for this month yet.</p> : null}
-                {(month.films || []).length > 4 ? <div className="monthly-more"><span className="monthly-more-count">+{month.films.length - 4}</span><span>more screenings</span><small>Full month in your diary</small></div> : null}
-              </div>
-            </article>
-          ))}
+          {monthly.slice(0, 8).map(month => {
+            const visibleFilms = (month.films || []).slice(0, 9);
+            const remaining = Math.max(0, Number(month.total_films || 0) - visibleFilms.length);
+            return (
+              <article className="monthly-shelf" key={String(month.year) + '-' + month.month}>
+                <div className="monthly-shelf-head">
+                  <div><span className="eyebrow">{month.year}</span><h3>{month.month}</h3></div>
+                  <div className="monthly-shelf-stats"><strong>{month.total_films}</strong><span>screenings</span><strong>{month.avg_rating ? Number(month.avg_rating).toFixed(1) + '★' : '—'}</strong><span>avg rating</span></div>
+                </div>
+                <div className="monthly-poster-row">
+                  {visibleFilms.map((film, i) => <div className="monthly-poster" key={film.title + '-' + i} title={film.title}><MiniPoster film={film} size="shelf" /><span>{film.title}</span></div>)}
+                  {!visibleFilms.length ? <p className="data-empty">No matched posters for this month yet.</p> : null}
+                  {remaining > 0 ? <div className="monthly-more"><span className="monthly-more-count">+{remaining}</span><span>more {remaining === 1 ? 'screening' : 'screenings'} in diary</span></div> : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section> : null}
 
@@ -326,6 +403,7 @@ function EmptyChart({ note }) {
 export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, onHome }) {
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [backdropFailed, setBackdropFailed] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [sharingTopFour, setSharingTopFour] = useState(false);
   const [shareError, setShareError] = useState('');
@@ -475,9 +553,24 @@ export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, on
     }
   };
 
+  const heroBackdrop = stats.hero_backdrop;
+  const showHeroBackdrop = Boolean(heroBackdrop?.backdrop_path && !backdropFailed);
+
   return (
     <main className="dashboard section-shell">
-      <div className="dashboard-masthead"><div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-outline" onClick={handleDelete} disabled={deleting || !jobId || !jobToken}>{deleting ? <LoaderCircle size={15} className="spin" /> : <Trash2 size={15} />}{deleting ? 'Deleting…' : 'Delete my data'}</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div></div>
+      <div className={'dashboard-masthead' + (showHeroBackdrop ? ' has-hero-backdrop' : '')}>
+        {showHeroBackdrop ? (
+          <div className="dashboard-masthead-backdrop" aria-hidden="true">
+            <img
+              src={'https://image.tmdb.org/t/p/w1280' + heroBackdrop.backdrop_path}
+              alt=""
+              loading="eager"
+              onError={() => setBackdropFailed(true)}
+            />
+          </div>
+        ) : null}
+        <div><div className="eyebrow"><span className="eyebrow-line" /> YOUR CINEMATHEQUE / PRIVATE EDITION</div><h1>The story so<br /><em>far.</em></h1><p className="dashboard-intro">A personal film journal, assembled from the films you've lived with. Your history, your patterns, your own point of view.</p></div><div className="dashboard-actions"><button className="button button-outline" onClick={onImport}><Upload size={15} /> Add an export</button><button className="button button-outline" onClick={handleDelete} disabled={deleting || !jobId || !jobToken}>{deleting ? <LoaderCircle size={15} className="spin" /> : <Trash2 size={15} />}{deleting ? 'Deleting…' : 'Delete my data'}</button><button className="button button-primary" onClick={handlePdf} disabled={downloading}>{downloading ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}{downloading ? 'Preparing…' : 'Print my archive'}</button></div>
+      </div>
       {downloadError ? <p className="form-error dashboard-error"><AlertCircle size={15} /> {downloadError}</p> : null}
       <div className="dashboard-rule"><span>THE JOURNAL AT A GLANCE</span><span>NOTHING HERE IS GUESSED</span></div>
       <div className="metric-grid">
@@ -516,8 +609,8 @@ export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, on
       <section className="dash-section">
         <div className="dash-section-title"><div><div className="section-marker"><span>02</span><span>THE HUMAN SIDE OF CINEMA</span></div><h2>Patterns worth <em>noticing.</em></h2></div></div>
         <div className="insight-grid">
-          <article className="insight-note"><span className="insight-number">A</span><span className="eyebrow">YOUR FIRST FRAME</span><h3>{basic.first_watched?.title || 'The beginning'}</h3><p>{basic.first_watched?.date ? 'The earliest dated film in your diary, on ' + basic.first_watched.date + '.' : 'Add dated entries to find the opening chapter of your film diary.'}</p></article>
-          <article className="insight-note"><span className="insight-number">B</span><span className="eyebrow">UNTIL NEXT TIME</span><h3>{basic.most_recent_watched?.title || 'The latest chapter'}</h3><p>{basic.most_recent_watched?.date ? 'Your most recent dated entry, on ' + basic.most_recent_watched.date + '.' : 'Your latest dated diary entry will appear here.'}</p></article>
+          <article className="insight-note"><span className="insight-number">A</span><span className="eyebrow">YOUR FIRST FRAME</span><div className="insight-film-row"><MiniPoster film={basic.first_watched} size="shelf" /><div><h3>{basic.first_watched?.title || 'The beginning'}</h3><p>{basic.first_watched?.date ? 'The earliest dated film in your diary, on ' + basic.first_watched.date + '.' : 'Add dated entries to find the opening chapter of your film diary.'}</p></div></div></article>
+          <article className="insight-note"><span className="insight-number">B</span><span className="eyebrow">UNTIL NEXT TIME</span><div className="insight-film-row"><MiniPoster film={basic.most_recent_watched} size="shelf" /><div><h3>{basic.most_recent_watched?.title || 'The latest chapter'}</h3><p>{basic.most_recent_watched?.date ? 'Your most recent dated entry, on ' + basic.most_recent_watched.date + '.' : 'Your latest dated diary entry will appear here.'}</p></div></div></article>
           <article className="insight-note"><span className="insight-number">C</span><span className="eyebrow">THE RETURNING VIEWER</span><h3>{Number(basic.total_rewatches || 0).toLocaleString()} rewatches</h3><p>Some films get better with time. These are the return visits recorded in your diary.</p></article>
         </div>
       </section>

@@ -24,9 +24,18 @@ class MatchSelectionTests(unittest.TestCase):
         results = [result("Parasite", 2019, original="기생충"), result("Parasite", 1982)]
         self.assertEqual(TMDBService._pick_best_match(results, "기생충", 2019)["release_date"][:4], "2019")
 
-    def test_falls_back_to_first_result(self):
-        results = [result("Unrelated", 1950), result("Another", 1960)]
-        self.assertEqual(TMDBService._pick_best_match(results, "Missing", 2020)["title"], "Unrelated")
+    def test_rejects_unrelated_and_substring_collisions(self):
+        # "The Fall" (2006) must NOT match "Jane Doe: The Harder They Fall" (2006).
+        results = [
+            {"id": 1, "title": "Jane Doe: The Harder They Fall", "original_title": "Jane Doe: The Harder They Fall", "release_date": "2006-03-01", "popularity": 50.0},
+            {"id": 2, "title": "The Fall", "original_title": "The Fall", "release_date": "2006-09-09", "popularity": 20.0},
+        ]
+        self.assertEqual(TMDBService._pick_best_match(results, "The Fall", 2006)["id"], 2)
+
+        # If only an unrelated or substring title is returned, return None (never results[0]).
+        bad_only = [results[0], result("Unrelated", 1950)]
+        self.assertIsNone(TMDBService._pick_best_match(bad_only, "The Fall", 2006))
+        self.assertIsNone(TMDBService._pick_best_match(bad_only, "Missing", 2020))
 
 
 class CredentialTests(unittest.TestCase):
@@ -53,6 +62,43 @@ class MissCacheTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(await service.enrich_movie("Nonexistent Film 12345", 1999))
                 self.assertIsNone(await service.enrich_movie("Nonexistent Film 12345", 1999))
                 self.assertEqual(search.await_count, 1)
+        finally:
+            await service.close()
+
+    async def test_stale_bad_cache_row_is_refreshed(self):
+        await db.init_db()
+        await db.cache_movie({
+            "tmdb_id": 999999,
+            "title": "Jane Doe: The Harder They Fall",
+            "year": 2006,
+            "search_key": "the_fall_2006",
+            "raw_details": {"id": 999999, "title": "Jane Doe: The Harder They Fall", "original_title": "Jane Doe: The Harder They Fall"},
+            "genres": [],
+            "directors": [],
+            "cast_members": [],
+            "runtime": 90,
+            "production_countries": [],
+            "original_language": "en",
+            "spoken_languages": [],
+            "release_date": "2006-03-01",
+            "poster_path": "/bad.jpg",
+            "backdrop_path": "/bad-bd.jpg",
+            "vote_average": 6.0,
+            "popularity": 10.0,
+        })
+        service = TMDBService()
+        try:
+            with patch.object(service, "search_movie", AsyncMock(return_value={"id": 14784})) as search, \
+                 patch.object(service, "get_movie_details", AsyncMock(return_value={
+                     "id": 14784, "title": "The Fall", "original_title": "The Fall",
+                     "release_date": "2006-09-09", "poster_path": "/fall.jpg", "backdrop_path": "/fall-bd.jpg",
+                     "runtime": 117, "genres": [{"id": 18, "name": "Drama"}],
+                     "credits": {"crew": [], "cast": []}, "production_countries": [], "spoken_languages": [],
+                 })):
+                refreshed = await service.enrich_movie("The Fall", 2006)
+                self.assertEqual(search.await_count, 1)
+                self.assertEqual(refreshed["title"], "The Fall")
+                self.assertEqual(refreshed["poster_path"], "/fall.jpg")
         finally:
             await service.close()
 

@@ -69,13 +69,19 @@ def compute_basic_stats(diary_df: pd.DataFrame, ratings_df: pd.DataFrame,
             nc = 'name' if 'name' in valid.columns else 'title'
             first_row = valid.iloc[0]
             last_row = valid.iloc[-1]
+            first_year = first_row.get('year')
+            last_year = last_row.get('year')
             first_watched = {
                 "title": str(first_row.get(nc, '')),
-                "date": str(first_row['watched_date'].date())
+                "year": int(first_year) if pd.notna(first_year) else None,
+                "date": str(first_row['watched_date'].date()),
+                "poster_path": None,
             }
             most_recent_watched = {
                 "title": str(last_row.get(nc, '')),
-                "date": str(last_row['watched_date'].date())
+                "year": int(last_year) if pd.notna(last_year) else None,
+                "date": str(last_row['watched_date'].date()),
+                "poster_path": None,
             }
 
     return {
@@ -218,6 +224,90 @@ def _get_tmdb_for_row(row, lookup: dict):
     return lookup.get((title, year_val))
 
 
+def enrich_watch_posters(basic_stats: dict, enriched_movies: list[dict]) -> dict:
+    """Attach TMDB poster_path and year to first_watched and most_recent_watched."""
+    tmdb_lookup = _build_tmdb_lookup(enriched_movies)
+    by_title = {
+        m["title"].lower().strip(): m["tmdb"]
+        for m in enriched_movies
+        if m.get("tmdb") and m.get("title")
+    }
+    for key in ("first_watched", "most_recent_watched"):
+        entry = basic_stats.get(key)
+        if not isinstance(entry, dict) or not entry.get("title"):
+            continue
+        title_key = str(entry["title"]).strip().lower()
+        entry_year = entry.get("year")
+        tmdb = tmdb_lookup.get((title_key, entry_year)) or (
+            by_title.get(title_key) if entry_year is None else None
+        )
+        if tmdb:
+            entry["poster_path"] = tmdb.get("poster_path")
+            if entry.get("year") is None and tmdb.get("year") is not None:
+                entry["year"] = tmdb.get("year")
+    return basic_stats
+
+
+def _count_diary_watches(diary_df: pd.DataFrame) -> tuple[Counter, Counter]:
+    """Count diary watch logs by (title_lower, year) and title_lower."""
+    by_key: Counter[tuple[str, int | None]] = Counter()
+    by_title: Counter[str] = Counter()
+    if not diary_df.empty:
+        d_name_col = 'name' if 'name' in diary_df.columns else 'title'
+        if d_name_col in diary_df.columns:
+            for _, d_row in diary_df.iterrows():
+                d_title = str(d_row.get(d_name_col, '')).strip().lower()
+                if not d_title or d_title == 'nan':
+                    continue
+                d_year = d_row.get('year')
+                d_year_val = int(d_year) if pd.notna(d_year) else None
+                by_key[(d_title, d_year_val)] += 1
+                by_title[d_title] += 1
+    return by_key, by_title
+
+
+def _pick_genre_film(
+    candidates: list[dict],
+    *,
+    mode: str,
+    exclude_keys: set[tuple[str, int | None]] | None = None,
+) -> dict | None:
+    """Pick a representative film for a genre card, preferring valid posters."""
+    if not candidates:
+        return None
+
+    pool = candidates
+    if mode == "highest_rated":
+        rated_pool = [c for c in pool if c["rating"] is not None]
+        if rated_pool:
+            pool = rated_pool
+    if exclude_keys:
+        distinct_with_poster = [
+            c for c in pool if c["_key"] not in exclude_keys and c.get("poster_path")
+        ]
+        if distinct_with_poster:
+            pool = distinct_with_poster
+
+    def sort_key(c: dict):
+        has_poster = bool(c.get("poster_path"))
+        rating = c["rating"] if c["rating"] is not None else -1.0
+        watches = c["watch_count"]
+        pop = c["_popularity"]
+        year = c["year"] or 0
+        if mode == "highest_rated":
+            return (has_poster, rating, watches, pop, year)
+        return (has_poster, watches, rating, pop, year)
+
+    best = max(pool, key=sort_key)
+    return {
+        "title": best["title"],
+        "year": best["year"],
+        "rating": best["rating"],
+        "watch_count": best["watch_count"],
+        "poster_path": best["poster_path"],
+    }
+
+
 def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
                          ratings_df: pd.DataFrame) -> dict:
     """PATRON-level statistics (TMDB-powered)."""
@@ -227,24 +317,45 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
     # Use ratings.csv as the canonical per-film source (avoids diary duplication)
     primary_df = ratings_df if not ratings_df.empty else diary_df
 
+    # Count diary watch logs per film so rewatches inform representative picks.
+    diary_watch_counts, diary_title_counts = _count_diary_watches(diary_df)
+
     # ─── Genre Analytics ───
     genre_counter = Counter()
     genre_ratings = defaultdict(list)
+    genre_candidates: dict[str, list[dict]] = defaultdict(list)
 
     if not primary_df.empty:
         name_col = 'name' if 'name' in primary_df.columns else 'title'
-        unique_films = primary_df.drop_duplicates(subset=[name_col]) if name_col in primary_df.columns else primary_df if name_col in primary_df.columns else primary_df
+        dedup_cols = [name_col, 'year'] if 'year' in primary_df.columns else [name_col]
+        unique_films = primary_df.drop_duplicates(subset=dedup_cols) if name_col in primary_df.columns else primary_df
         for _, row in unique_films.iterrows():
             tmdb = _get_tmdb_for_row(row, tmdb_lookup)
             if not tmdb:
                 continue
             genres = tmdb.get("genres", [])
             rating = row.get('rating')
+            raw_title = str(row.get(name_col, '')).strip()
+            title_key = raw_title.lower()
+            row_year = row.get('year')
+            row_year_val = int(row_year) if pd.notna(row_year) else None
+            year_val = tmdb.get("year") if tmdb.get("year") is not None else row_year_val
+            watch_count = diary_watch_counts.get((title_key, row_year_val)) or diary_title_counts.get(title_key) or 1
+            candidate = {
+                "title": tmdb.get("title") or raw_title,
+                "year": year_val,
+                "rating": float(rating) if pd.notna(rating) else None,
+                "watch_count": int(watch_count),
+                "poster_path": tmdb.get("poster_path"),
+                "_popularity": float(tmdb.get("popularity") or 0),
+                "_key": (title_key, year_val),
+            }
             for g in genres:
                 gname = g["name"] if isinstance(g, dict) else str(g)
                 genre_counter[gname] += 1
                 if pd.notna(rating):
                     genre_ratings[gname].append(float(rating))
+                genre_candidates[gname].append(candidate)
 
     most_watched_genre = genre_counter.most_common(1)[0][0] if genre_counter else None
     genre_distribution = dict(genre_counter.most_common(20))
@@ -257,11 +368,47 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
     if qualified_genres:
         favorite_genre = max(qualified_genres.items(), key=lambda x: x[1])
 
+    signature_film = (
+        _pick_genre_film(genre_candidates.get(most_watched_genre, []), mode="signature")
+        if most_watched_genre else None
+    )
+    signature_key = (
+        (signature_film["title"].strip().lower(), signature_film["year"])
+        if signature_film else None
+    )
+    if signature_film and most_watched_genre:
+        # Match the exact _key used in genre_candidates for distinctness.
+        matched_sig = next(
+            (
+                c["_key"] for c in genre_candidates.get(most_watched_genre, [])
+                if c["title"] == signature_film["title"] and c["year"] == signature_film["year"]
+            ),
+            signature_key,
+        )
+        signature_key = matched_sig
+
+    favorite_genre_film = (
+        _pick_genre_film(
+            genre_candidates.get(favorite_genre[0], []),
+            mode="highest_rated",
+            exclude_keys={signature_key} if signature_key else None,
+        )
+        if favorite_genre else None
+    )
+
     results["genre_analytics"] = {
         "most_watched_genre": most_watched_genre,
         "genre_distribution": genre_distribution,
         "average_rating_per_genre": avg_rating_per_genre,
-        "favorite_genre": {"name": favorite_genre[0], "avg_rating": favorite_genre[1]} if favorite_genre else None,
+        "signature_film": signature_film,
+        "favorite_genre": (
+            {
+                "name": favorite_genre[0],
+                "avg_rating": favorite_genre[1],
+                "representative_film": favorite_genre_film,
+            }
+            if favorite_genre else None
+        ),
     }
 
     # ─── Director Analytics ───
@@ -271,7 +418,8 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
     if not primary_df.empty:
         name_col = 'name' if 'name' in primary_df.columns else 'title'
-        unique_films_dir = primary_df.drop_duplicates(subset=[name_col]) if name_col in primary_df.columns else primary_df
+        dedup_cols = [name_col, 'year'] if 'year' in primary_df.columns else [name_col]
+        unique_films_dir = primary_df.drop_duplicates(subset=dedup_cols) if name_col in primary_df.columns else primary_df
         for _, row in unique_films_dir.iterrows():
             tmdb = _get_tmdb_for_row(row, tmdb_lookup)
             if not tmdb:
@@ -368,10 +516,16 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
         if not isinstance(rt, (int, float)) or rt <= 0:
             continue
         runtimes.append(rt)
+        film_info = {
+            "title": tmdb.get("title", m.get("title")),
+            "year": tmdb.get("year") if tmdb.get("year") is not None else m.get("year"),
+            "runtime": rt,
+            "poster_path": tmdb.get("poster_path"),
+        }
         if not longest_film or rt > longest_film["runtime"]:
-            longest_film = {"title": tmdb.get("title", m.get("title")), "runtime": rt}
+            longest_film = dict(film_info)
         if not shortest_film or rt < shortest_film["runtime"]:
-            shortest_film = {"title": tmdb.get("title", m.get("title")), "runtime": rt}
+            shortest_film = dict(film_info)
 
     total_minutes = sum(runtimes)
     results["runtime_analytics"] = {
@@ -422,7 +576,8 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
 
 def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
-                           ratings_df: pd.DataFrame) -> dict:
+                           ratings_df: pd.DataFrame,
+                           exclude_keys: set[tuple[str, int | None]] | None = None) -> dict:
     """ADVANCED insight features (beyond Patron)."""
     results = {}
     tmdb_lookup = _build_tmdb_lookup(enriched_movies)
@@ -436,7 +591,8 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
 
     if not primary_df.empty:
         name_col = 'name' if 'name' in primary_df.columns else 'title'
-        unique_films_dir = primary_df.drop_duplicates(subset=[name_col]) if name_col in primary_df.columns else primary_df
+        dedup_cols = [name_col, 'year'] if 'year' in primary_df.columns else [name_col]
+        unique_films_dir = primary_df.drop_duplicates(subset=dedup_cols) if name_col in primary_df.columns else primary_df
         for _, row in unique_films_dir.iterrows():
             tmdb = _get_tmdb_for_row(row, tmdb_lookup)
             rating = row.get('rating')
@@ -503,19 +659,36 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
     if not diary_df.empty and 'is_rewatch' in diary_df.columns:
         name_col = 'name' if 'name' in diary_df.columns else 'title'
         rewatches = diary_df[diary_df['is_rewatch'] == True]
-        if not rewatches.empty:
-            most_rw = rewatches[name_col].value_counts()
-            rewatched_title = str(most_rw.index[0])
-            matched_rewatch = next(
-                (entry for entry in film_entries if entry["title"].strip().lower() == rewatched_title.strip().lower()),
-                None,
-            )
-            results["most_rewatched_film"] = {
-                "title": rewatched_title,
-                "rewatch_count": int(most_rw.iloc[0]),
-                "year": matched_rewatch["year"] if matched_rewatch else None,
-                "poster_path": matched_rewatch["poster_path"] if matched_rewatch else None,
-            }
+        if not rewatches.empty and name_col in rewatches.columns:
+            rw_counts: Counter[tuple[str, int | None]] = Counter()
+            rw_display: dict[tuple[str, int | None], str] = {}
+            for _, rw_row in rewatches.iterrows():
+                rw_title = str(rw_row.get(name_col, '')).strip()
+                if not rw_title or rw_title.lower() == 'nan':
+                    continue
+                rw_year = rw_row.get('year')
+                rw_year_val = int(rw_year) if pd.notna(rw_year) else None
+                key = (rw_title.lower(), rw_year_val)
+                rw_counts[key] += 1
+                rw_display.setdefault(key, rw_title)
+
+            if rw_counts:
+                (rw_key, rw_count) = rw_counts.most_common(1)[0]
+                rewatched_title = rw_display[rw_key]
+                matched_tmdb = tmdb_lookup.get(rw_key)
+                if not matched_tmdb and rw_key[1] is None:
+                    matched_tmdb = next(
+                        (entry for entry in film_entries if entry["title"].strip().lower() == rw_key[0]),
+                        None,
+                    )
+                results["most_rewatched_film"] = {
+                    "title": (matched_tmdb.get("title") if matched_tmdb else None) or rewatched_title,
+                    "rewatch_count": int(rw_count),
+                    "year": (matched_tmdb.get("year") if matched_tmdb else None) or rw_key[1],
+                    "poster_path": matched_tmdb.get("poster_path") if matched_tmdb else None,
+                }
+            else:
+                results["most_rewatched_film"] = None
         else:
             results["most_rewatched_film"] = None
     else:
@@ -533,6 +706,62 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
                 genre_combos[combo] += 1
 
     results["most_common_genre_combo"] = genre_combos.most_common(5) if genre_combos else []
+
+    top_genre_combo_film = None
+    if results["most_common_genre_combo"]:
+        required_genres = {
+            g.strip() for g in results["most_common_genre_combo"][0][0].split(" + ") if g.strip()
+        }
+        diary_watch_counts, diary_title_counts = _count_diary_watches(diary_df)
+        rating_by_key: dict[tuple[str, int | None], float] = {}
+        rating_by_title: dict[str, float] = {}
+        if not primary_df.empty and 'rating' in primary_df.columns:
+            r_name_col = 'name' if 'name' in primary_df.columns else 'title'
+            if r_name_col in primary_df.columns:
+                for _, r_row in primary_df.iterrows():
+                    r_val = r_row.get('rating')
+                    if pd.isna(r_val):
+                        continue
+                    r_title = str(r_row.get(r_name_col, '')).strip().lower()
+                    r_year = r_row.get('year')
+                    r_year_val = int(r_year) if pd.notna(r_year) else None
+                    rating_by_key[(r_title, r_year_val)] = float(r_val)
+                    rating_by_title[r_title] = float(r_val)
+
+        combo_candidates = []
+        for m in enriched_movies:
+            tmdb = m.get("tmdb")
+            if not tmdb:
+                continue
+            film_genres = {
+                g["name"] if isinstance(g, dict) else str(g)
+                for g in tmdb.get("genres", [])
+            }
+            if not required_genres.issubset(film_genres):
+                continue
+            raw_title = str(m.get("title") or tmdb.get("title") or "").strip()
+            title_key = raw_title.lower()
+            m_year = m.get("year")
+            year_val = tmdb.get("year") if tmdb.get("year") is not None else m_year
+            watch_count = diary_watch_counts.get((title_key, m_year)) or diary_title_counts.get(title_key) or 1
+            user_rating = rating_by_key.get((title_key, m_year))
+            if user_rating is None:
+                user_rating = rating_by_title.get(title_key)
+            combo_candidates.append({
+                "title": tmdb.get("title") or raw_title,
+                "year": year_val,
+                "rating": user_rating,
+                "watch_count": int(watch_count),
+                "poster_path": tmdb.get("poster_path"),
+                "_popularity": float(tmdb.get("popularity") or 0),
+                "_key": (title_key, year_val),
+            })
+
+        top_genre_combo_film = _pick_genre_film(
+            combo_candidates, mode="signature", exclude_keys=exclude_keys
+        )
+
+    results["top_genre_combo_film"] = top_genre_combo_film
 
     # ─── Release Year vs Rating Correlation ───
     year_rating_pairs = []
@@ -653,7 +882,9 @@ def compute_community_comparison(enriched_movies: list[dict],
             if not title_key or film_key in seen_five_star or rating_val != 5.0:
                 continue
             seen_five_star.add(film_key)
-            tmdb = _get_tmdb_for_row(diary_row, tmdb_lookup) or enriched_by_title.get(title_key) or {}
+            tmdb = _get_tmdb_for_row(diary_row, tmdb_lookup) or (
+                enriched_by_title.get(title_key) if diary_year_val is None else None
+            ) or {}
             latest_five_star.append({
                 "title": tmdb.get("title", diary_title),
                 "year": tmdb.get("year", diary_year_val),
@@ -679,6 +910,7 @@ def compute_community_comparison(enriched_movies: list[dict],
             "title": tmdb.get("title", title),
             "year": tmdb.get("year"),
             "poster_path": tmdb.get("poster_path"),
+            "backdrop_path": tmdb.get("backdrop_path"),
             "user_rating": user_r,
         }
         top_rated.append(film)
@@ -805,16 +1037,13 @@ def compute_monthly_activity(enriched_movies: list[dict],
             "films": unique_films,
         })
 
-    # Most recent months first
     result.reverse()
     return result
 
 
 def compute_decade_leaderboard(enriched_movies: list[dict],
                                 decade_ratings: dict) -> list[dict]:
-    """Build decade leaderboard with top 3 decades (min 5 films) and poster thumbnails."""
-    # decade_ratings: {1990: [4.0, 3.5, ...], ...}
-    # Build poster lookup per decade
+    """Build decade leaderboard (min 5 rated films per decade) with poster thumbnails."""
     decade_posters = defaultdict(list)
     for m in enriched_movies:
         tmdb = m.get("tmdb")
@@ -827,7 +1056,7 @@ def compute_decade_leaderboard(enriched_movies: list[dict],
         if len(ratings) < 5:
             continue
         avg = round(sum(ratings) / len(ratings), 2)
-        posters = decade_posters.get(dec, [])[:3]  # Top 3 posters
+        posters = decade_posters.get(dec, [])[:3]
         leaderboard.append({
             "decade": f"{dec}s",
             "avg_rating": avg,
@@ -835,7 +1064,31 @@ def compute_decade_leaderboard(enriched_movies: list[dict],
             "top_posters": [{"poster_path": p} for p in posters],
         })
 
-    # Sort by avg_rating desc
     leaderboard.sort(key=lambda x: x["avg_rating"], reverse=True)
-    return leaderboard[:5]  # Top 5
+    return leaderboard[:6]
+
+
+def select_hero_backdrop(
+    favorite_films: list[dict],
+    enriched_movies: list[dict],
+    community_comparison: dict | None = None,
+) -> dict | None:
+    """Check the user's top 4 films in order (3rd -> 4th -> 1st -> 2nd) for a TMDB backdrop."""
+    if favorite_films:
+        top_four = favorite_films[:4]
+    else:
+        top_four = ((community_comparison or {}).get("top_rated") or [])[:4]
+
+    for idx in (2, 3, 0, 1):
+        if idx >= len(top_four):
+            continue
+        film = top_four[idx]
+        backdrop = film.get("backdrop_path") if isinstance(film, dict) else None
+        if backdrop:
+            return {
+                "backdrop_path": backdrop,
+                "title": film.get("title"),
+                "year": film.get("year"),
+            }
+    return None
 

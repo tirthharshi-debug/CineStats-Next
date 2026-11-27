@@ -19,9 +19,11 @@ DB_PATH = str(config.DATA_DIR / "tmdb_cache.db")
 # Columns returned to the stats code. raw_details is intentionally left out:
 # it is large, and holding it for every film in memory is wasteful.
 _CACHE_COLUMNS = (
-    "tmdb_id, title, year, search_key, genres, directors, cast_members, runtime, "
+    "tmdb_id, title, json_extract(raw_details, '$.original_title') AS original_title, "
+    "year, search_key, genres, directors, cast_members, runtime, "
     "production_countries, original_language, spoken_languages, release_date, "
-    "poster_path, vote_average, popularity"
+    "poster_path, COALESCE(backdrop_path, json_extract(raw_details, '$.backdrop_path')) AS backdrop_path, "
+    "vote_average, popularity"
 )
 _JSON_FIELDS = ["genres", "directors", "cast_members", "production_countries", "spoken_languages"]
 
@@ -62,11 +64,16 @@ async def init_db():
                 spoken_languages JSON,
                 release_date TEXT,
                 poster_path TEXT,
+                backdrop_path TEXT,
                 vote_average REAL,
                 popularity REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        try:
+            await db.execute("ALTER TABLE tmdb_cache ADD COLUMN backdrop_path TEXT")
+        except Exception:
+            pass
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_search_key ON tmdb_cache(search_key)
         """)
@@ -135,8 +142,8 @@ async def cache_movie(movie_data: dict):
                 INSERT OR REPLACE INTO tmdb_cache 
                 (tmdb_id, title, year, search_key, raw_details, genres, directors, 
                  cast_members, runtime, production_countries, original_language, 
-                 spoken_languages, release_date, poster_path, vote_average, popularity)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 spoken_languages, release_date, poster_path, backdrop_path, vote_average, popularity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 data.get("tmdb_id"),
                 data.get("title"),
@@ -152,6 +159,7 @@ async def cache_movie(movie_data: dict):
                 data.get("spoken_languages"),
                 data.get("release_date"),
                 data.get("poster_path"),
+                data.get("backdrop_path"),
                 data.get("vote_average"),
                 data.get("popularity"),
             ))

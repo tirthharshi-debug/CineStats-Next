@@ -32,7 +32,8 @@ from app.services.stats_service import (
     compute_basic_stats, compute_pro_stats,
     compute_patron_stats, compute_advanced_stats,
     compute_community_comparison, compute_binge_stats,
-    compute_monthly_activity, compute_decade_leaderboard
+    compute_monthly_activity, compute_decade_leaderboard,
+    enrich_watch_posters, select_hero_backdrop,
 )
 
 logger = logging.getLogger("cinestats.api")
@@ -202,26 +203,23 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
                     continue
             job["status"] = "extracting"
 
-        # 1. Extract ZIP (CPU + disk work: keep it off the event loop)
+        # Run CPU/disk work off the event loop so polling stays responsive.
         extract_path = await asyncio.to_thread(extract_zip, file_bytes)
-        file_bytes = b""  # the raw upload is no longer needed
+        file_bytes = b""
 
         await asyncio.to_thread(validate_letterboxd_export, extract_path)
 
         job["status"] = "parsing"
 
-        # 2. Parse CSVs
         diary_df = await asyncio.to_thread(parse_diary, extract_path)
         ratings_df = await asyncio.to_thread(parse_ratings, extract_path)
         watched_df = await asyncio.to_thread(parse_watched, extract_path)
         lists_data = await asyncio.to_thread(parse_lists, extract_path)
         favorite_urls = await asyncio.to_thread(parse_profile_favorites, extract_path)
 
-        # 3. Compute basic + pro stats immediately (no TMDB needed)
         basic_stats = await asyncio.to_thread(compute_basic_stats, diary_df, ratings_df, watched_df)
         pro_stats = await asyncio.to_thread(compute_pro_stats, diary_df, ratings_df)
 
-        # 4. Get unique movies for TMDB enrichment
         unique_movies = await asyncio.to_thread(get_unique_movies, diary_df, watched_df, ratings_df)
         if len(unique_movies) > config.MAX_UNIQUE_MOVIES:
             raise ValueError(
@@ -231,7 +229,6 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
         job["total"] = len(unique_movies)
         job["status"] = "enriching"
 
-        # 5. Enrich movies via TMDB (this is the slow part)
         tmdb_service = TMDBService()
 
         async def update_progress(current: int, total: int):
@@ -246,18 +243,30 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
 
         job["status"] = "computing"
 
-        # 6. Compute patron + advanced stats
+        await asyncio.to_thread(enrich_watch_posters, basic_stats, enriched)
         patron_stats = await asyncio.to_thread(compute_patron_stats, enriched, diary_df, ratings_df)
-        advanced_stats = await asyncio.to_thread(compute_advanced_stats, enriched, diary_df, ratings_df)
+        genre_info = patron_stats.get("genre_analytics", {})
+        exclude_genre_keys = set()
+        for film_obj in (
+            genre_info.get("signature_film"),
+            (genre_info.get("favorite_genre") or {}).get("representative_film"),
+        ):
+            if isinstance(film_obj, dict) and film_obj.get("title"):
+                exclude_genre_keys.add((str(film_obj["title"]).strip().lower(), film_obj.get("year")))
+        advanced_stats = await asyncio.to_thread(
+            compute_advanced_stats, enriched, diary_df, ratings_df, exclude_genre_keys
+        )
 
-        # 7. New feature stats
         community_comparison = await asyncio.to_thread(compute_community_comparison, enriched, ratings_df, diary_df)
         binge_stats = await asyncio.to_thread(compute_binge_stats, diary_df)
         monthly_activity = await asyncio.to_thread(compute_monthly_activity, enriched, diary_df)
         decade_leaderboard = await asyncio.to_thread(
             compute_decade_leaderboard, enriched, pro_stats.get("_decade_ratings", {})
         )
-        pro_stats.pop("_decade_ratings", None)  # internal helper data, not for clients
+        pro_stats.pop("_decade_ratings", None)
+        hero_backdrop = await asyncio.to_thread(
+            select_hero_backdrop, favorite_films, enriched, community_comparison
+        )
 
         result = _json_safe({
             "success": True,
@@ -268,6 +277,7 @@ async def _process_in_background(job_id: str, file_bytes: bytes):
                 "advanced": advanced_stats,
                 "community_comparison": community_comparison,
                 "favorite_films": favorite_films,
+                "hero_backdrop": hero_backdrop,
                 "binge_stats": binge_stats,
                 "monthly_activity": monthly_activity,
                 "decade_leaderboard": decade_leaderboard,

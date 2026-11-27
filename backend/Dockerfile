@@ -1,5 +1,4 @@
-# Optional: use this for a VPS or any container host. Render can also deploy
-# the backend directly from render.yaml without Docker.
+# Optional: container image for running the backend on a VPS or container host.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
