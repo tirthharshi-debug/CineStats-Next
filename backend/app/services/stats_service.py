@@ -919,7 +919,7 @@ def compute_community_comparison(enriched_movies: list[dict],
         if vote_avg is None or vote_avg == 0:
             continue
 
-        tmdb_r_5 = round(float(vote_avg) / 2, 2)  # Convert 0-10 to 0-5
+        tmdb_r_5 = round(float(vote_avg) / 2, 2)
         diff = round(user_r - tmdb_r_5, 2)
 
         comparisons.append({
@@ -928,7 +928,6 @@ def compute_community_comparison(enriched_movies: list[dict],
             "difference": diff,
         })
 
-    # Sort by difference
     rated_higher = sorted([c for c in comparisons if c["difference"] > 0],
                           key=lambda x: x["difference"], reverse=True)[:10]
     rated_lower = sorted([c for c in comparisons if c["difference"] < 0],
@@ -982,7 +981,6 @@ def compute_monthly_activity(enriched_movies: list[dict],
     month_names = ['January', 'February', 'March', 'April', 'May', 'June',
                    'July', 'August', 'September', 'October', 'November', 'December']
 
-    # Build TMDB lookup for posters, keyed by (title, year)
     tmdb_lookup = _build_tmdb_lookup(enriched_movies)
 
     valid = diary_df.dropna(subset=['watched_date']).copy()
@@ -995,7 +993,6 @@ def compute_monthly_activity(enriched_movies: list[dict],
         yr = period.year
         mo = period.month
 
-        # Films watched this month
         films_list = []
         for _, row in group.iterrows():
             title = str(row.get(name_col, ''))
@@ -1007,7 +1004,6 @@ def compute_monthly_activity(enriched_movies: list[dict],
                 "poster_path": tmdb.get("poster_path"),
             })
 
-        # Deduplicate posters (keep first occurrence, limit to 12)
         seen_titles = set()
         unique_films = []
         for f in films_list:
@@ -1018,12 +1014,10 @@ def compute_monthly_activity(enriched_movies: list[dict],
             if len(unique_films) >= 12:
                 break
 
-        # Day counts for binge peak
         day_counts = group['watched_date'].dt.date.value_counts()
         max_day_count = int(day_counts.max()) if not day_counts.empty else 0
         intense_day = str(day_counts.idxmax()) if not day_counts.empty else None
 
-        # Avg rating
         rated = [float(r) for r in group['rating'].dropna()] if 'rating' in group.columns else []
         avg_r = round(sum(rated) / len(rated), 2) if rated else None
 

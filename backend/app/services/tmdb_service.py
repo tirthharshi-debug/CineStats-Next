@@ -389,7 +389,7 @@ class TMDBService:
         cast_members = [
             {"id": c["id"], "name": c["name"], "character": c.get("character", ""),
              "order": c.get("order", 999), "profile_path": c.get("profile_path")}
-            for c in credits.get("cast", [])[:20]  # Top 20 cast
+            for c in credits.get("cast", [])[:20]
         ]
         genres = [{"id": g["id"], "name": g["name"]} for g in details.get("genres", [])]
         countries = [
@@ -445,7 +445,7 @@ class TMDBService:
         Results are returned in the same order as the input list.
         """
         total = len(movies)
-        results: list[dict | None] = [None] * total  # pre-sized for index assignment
+        results: list[dict | None] = [None] * total
         _completed = 0
         _progress_lock = asyncio.Lock()
 
