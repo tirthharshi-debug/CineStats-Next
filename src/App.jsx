@@ -234,7 +234,7 @@ function LandingPage({ onImport }) {
     <>
       <section className="hero section-shell">
         <div className="hero-copy">
-          <div className="eyebrow hero-eyebrow"><span className="eyebrow-line" /> A HOME FOR YOUR FILM LIFE <span className="edition-number">VOL. 01 — 2026</span></div>
+          <div className="eyebrow hero-eyebrow"><span className="eyebrow-line" /> A HOME FOR YOUR FILM LIFE </div>
           <h1>A life<br />in <em>film.</em></h1>
           <p className="hero-deck">Not another list of things you've watched. A living portrait of the films that found you, changed you, and stayed long after the credits.</p>
           <div className="hero-actions"><button className="button button-primary" onClick={onImport}>Enter your cinematheque <ArrowUpRight size={17} /></button><a className="quiet-link" href="#manifesto">Get the idea <ArrowDownRight size={15} /></a></div>
@@ -319,7 +319,7 @@ function Footer({ onImport, dashboard = false }) {
           <a href="https://letterboxd.com/data/export/" target="_blank" rel="noreferrer">How to export Letterboxd <ArrowUpRight size={13} /></a>
           <div className="footer-socials" aria-label="Social links">
             <a className="footer-social-link footer-letterboxd-link" href="https://boxd.it/8hpsV" target="_blank" rel="noopener noreferrer" aria-label="Letterboxd profile" title="Letterboxd"><LetterboxdMark size={24} /></a>
-            <a className="footer-social-link footer-github-link" href="https://github.com/tirthharshi-debug/CineStats-Next" target="_blank" rel="noopener noreferrer" aria-label="CineStats on GitHub" title="GitHub"><Github size={22} strokeWidth={1.8} /></a>
+            <a className="footer-social-link footer-github-link" href="https://github.com/tirthharshi-debug/CineStats" target="_blank" rel="noopener noreferrer" aria-label="CineStats on GitHub" title="GitHub"><Github size={22} strokeWidth={1.8} /></a>
           </div>
         </div>
       </div>

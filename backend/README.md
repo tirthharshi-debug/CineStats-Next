@@ -1,4 +1,4 @@
-# CineStats Next API
+# CineStats API
 
 FastAPI backend for Letterboxd export parsing, TMDB metadata enrichment, analytics computation, and PDF report generation.
 

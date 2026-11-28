@@ -618,7 +618,7 @@ export default function AnalyticsDashboard({ data, jobId, jobToken, onImport, on
       <RichAnalytics patron={patron} advanced={stats.advanced || {}} community={stats.community_comparison || {}} binge={stats.binge_stats || {}} monthly={stats.monthly_activity || []} decades={stats.decade_leaderboard || []} />
       <section className="dash-footer-note"><Sparkles size={17} /><p><strong>This is a record, not a verdict.</strong> Stats reflect what's present in your export. The most important part of your film life may never fit inside a chart.</p></section>
       <button className="back-link" onClick={onHome}><ArrowRight size={15} /> Back to the opening credits</button>
-      <div className="dashboard-meta"><span>{meta.total_unique_movies || basic.total_films || 0} unique titles discovered</span><span>YOUR PERSONAL CINEMATHEQUE · CS/NEXT</span></div>
+      <div className="dashboard-meta"><span>{meta.total_unique_movies || basic.total_films || 0} unique titles discovered</span><span>YOUR PERSONAL CINEMATHEQUE · CS</span></div>
     </main>
   );
 }

@@ -16,4 +16,4 @@ venv/
 node_modules/
 dist/
 .git/
-CineStats-Next-audit/
+CineStats-audit/
