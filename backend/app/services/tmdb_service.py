@@ -146,22 +146,32 @@ class TMDBService:
     async def search_movie(self, title: str, year: int | None = None) -> dict | None:
         """Search for a movie by title, evaluating year and year +/- 1 candidates."""
         base_params = self._auth_params({"query": title})
-        data = await self._rate_limited_request(
-            f"{TMDB_BASE_URL}/search/movie", dict(base_params)
-        )
-        results = list(data.get("results") or []) if data else []
-        match = self._pick_best_match(results, title, year) if results else None
 
-        if match is None and year is not None:
+        async def _search_pass(extra_params: dict) -> dict | None:
+            data = await self._rate_limited_request(
+                f"{TMDB_BASE_URL}/search/movie", dict(base_params, **extra_params)
+            )
+            results = list(data.get("results") or []) if data else []
+            match = self._pick_best_match(results, title, year) if results else None
+            if match is not None or year is None:
+                return match
+
             fallback_results: list[dict] = []
             for candidate_year in (year, year + 1, year - 1):
                 year_data = await self._rate_limited_request(
-                    f"{TMDB_BASE_URL}/search/movie", dict(base_params, year=candidate_year)
+                    f"{TMDB_BASE_URL}/search/movie",
+                    dict(base_params, year=candidate_year, **extra_params),
                 )
                 if year_data and year_data.get("results"):
                     fallback_results.extend(year_data["results"])
-            if fallback_results:
-                match = self._pick_best_match(fallback_results, title, year)
+            return self._pick_best_match(fallback_results, title, year) if fallback_results else None
+
+        match = await _search_pass({})
+        if match is None:
+            # Some legitimate non-adult films (e.g. Guilty of Romance, 2011) are omitted
+            # by TMDB's default search unless include_adult=true is passed; _pick_best_match
+            # still prioritizes non-adult entries over adult-flagged ones.
+            match = await _search_pass({"include_adult": "true"})
 
         return match
 
@@ -233,10 +243,12 @@ class TMDBService:
                 year_bonus = 1.0
 
             title_tier = 2 if is_exact else 1
+            non_adult_tier = 0 if r.get("adult") else 1
+            poster_bonus = 0.25 if r.get("poster_path") else 0.0
             pop = max(0.0, float(r.get("popularity") or 0))
             votes = max(0.0, float(r.get("vote_count") or 0))
             prominence = math.log1p(votes) * 0.6 + math.log1p(pop) * 0.3
-            return (title_tier, round(year_bonus + prominence, 6), votes, pop)
+            return (non_adult_tier, title_tier, round(year_bonus + poster_bonus + prominence, 6), votes, pop)
 
         ranked = []
         for r in results:
@@ -315,6 +327,10 @@ class TMDBService:
                     r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
                     html_text,
                     flags=re.IGNORECASE,
+                ) or re.search(
+                    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:title["\']',
+                    html_text,
+                    flags=re.IGNORECASE,
                 )
                 if not title_match:
                     title_match = re.search(
@@ -322,8 +338,8 @@ class TMDBService:
                         html_text,
                         flags=re.IGNORECASE | re.DOTALL,
                     )
-                page_title = unescape(title_match.group(1)).strip() if title_match else ""
-                page_title = re.sub(r"\s*[—|]\s*Letterboxd\s*$", "", page_title, flags=re.IGNORECASE)
+                page_title = unescape(title_match.group(1)).lstrip("\u200e").strip() if title_match else ""
+                page_title = re.sub(r"\s*(?:[—|]|•[^•]*•)\s*Letterboxd\s*$", "", page_title, flags=re.IGNORECASE)
                 year_match = re.search(r"\((\d{4})\)", page_title)
                 year = int(year_match.group(1)) if year_match else None
                 title = re.sub(r"\s*\(\d{4}\)\s*$", "", page_title).strip()

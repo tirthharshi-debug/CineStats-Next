@@ -50,6 +50,17 @@ class MatchSelectionTests(unittest.TestCase):
         self.assertIsNotNone(chosen)
         self.assertEqual(chosen["id"], 2002)
 
+    def test_prefers_candidate_with_poster_when_scores_close(self):
+        candidates = [
+            {"id": 1, "title": "Guilty of Romance", "original_title": "恋の罪",
+             "release_date": "2011-09-30", "poster_path": None, "popularity": 5.0, "vote_count": 10},
+            {"id": 2, "title": "Guilty of Romance", "original_title": "恋の罪",
+             "release_date": "2011-09-30", "poster_path": "/9Yc6ip8cBDbkfy5K8Ob401PjlJa.jpg", "popularity": 5.0, "vote_count": 10},
+        ]
+        chosen = TMDBService._pick_best_match(candidates, "Guilty of Romance", 2011)
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["id"], 2)
+
 
 class CredentialTests(unittest.TestCase):
     def test_key_goes_in_query_only_without_bearer_token(self):
@@ -165,6 +176,72 @@ class MissCacheTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(enriched["tmdb_id"], 2002)
                 self.assertEqual(enriched["runtime"], 99)
                 self.assertEqual(enriched["year"], 2023)
+        finally:
+            await service.close()
+
+    async def test_guilty_of_romance_falls_back_to_include_adult_and_ignores_v1_miss(self):
+        import aiosqlite
+        await db.init_db()
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "INSERT OR REPLACE INTO tmdb_miss (search_key, checked_at, match_version) VALUES (?, strftime('%s','now'), 1)",
+                ("guilty_of_romance_2011",),
+            )
+            await conn.commit()
+
+        async def fake_request(url, params):
+            if params.get("include_adult") == "true":
+                return {
+                    "results": [
+                        {"id": 1673725, "title": "Adult Collision Guilty of Romance", "original_title": "Adult Collision",
+                         "release_date": "2026-04-07", "adult": True, "poster_path": "/bad.jpg", "popularity": 20.0, "vote_count": 50},
+                        {"id": 80662, "title": "Guilty of Romance", "original_title": "恋の罪",
+                         "release_date": "2011-09-30", "adult": False, "poster_path": "/9Yc6ip8cBDbkfy5K8Ob401PjlJa.jpg", "popularity": 12.0, "vote_count": 320},
+                    ]
+                }
+            return {"results": []}
+
+        details_payload = {
+            "id": 80662, "title": "Guilty of Romance", "original_title": "恋の罪",
+            "release_date": "2011-09-30", "poster_path": "/9Yc6ip8cBDbkfy5K8Ob401PjlJa.jpg",
+            "backdrop_path": "/gor-bd.jpg", "runtime": 144,
+            "genres": [{"id": 18, "name": "Drama"}],
+            "credits": {"crew": [{"id": 77, "name": "Sion Sono", "job": "Director"}], "cast": []},
+            "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+            "spoken_languages": [{"iso_639_1": "ja", "english_name": "Japanese"}],
+            "vote_average": 6.8, "popularity": 12.0,
+        }
+
+        service = TMDBService()
+        try:
+            with patch.object(service, "_rate_limited_request", side_effect=fake_request), \
+                 patch.object(service, "get_movie_details", AsyncMock(return_value=details_payload)):
+                enriched = await service.enrich_movie("Guilty of Romance", 2011)
+                self.assertIsNotNone(enriched)
+                self.assertEqual(enriched["tmdb_id"], 80662)
+                self.assertEqual(enriched["poster_path"], "/9Yc6ip8cBDbkfy5K8Ob401PjlJa.jpg")
+        finally:
+            await service.close()
+
+    async def test_include_adult_fallback_also_checks_year_offset(self):
+        async def fake_request(url, params):
+            if params.get("include_adult") == "true" and params.get("year") == 2012:
+                return {
+                    "results": [
+                        {"id": 9001, "title": "Festival Film", "original_title": "Festival Film",
+                         "release_date": "2012-02-01", "adult": False, "poster_path": "/fest.jpg",
+                         "popularity": 6.0, "vote_count": 25},
+                    ]
+                }
+            return {"results": []}
+
+        service = TMDBService()
+        try:
+            with patch.object(service, "_rate_limited_request", side_effect=fake_request):
+                match = await service.search_movie("Festival Film", 2011)
+                self.assertIsNotNone(match)
+                self.assertEqual(match["id"], 9001)
+                self.assertEqual(match["poster_path"], "/fest.jpg")
         finally:
             await service.close()
 

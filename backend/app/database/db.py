@@ -26,7 +26,7 @@ _CACHE_COLUMNS = (
     "vote_average, popularity, match_version"
 )
 _JSON_FIELDS = ["genres", "directors", "cast_members", "production_countries", "spoken_languages"]
-MATCH_VERSION = 2
+MATCH_VERSION = 3
 
 # Serializes all SQLite write operations across concurrent async tasks.
 _write_lock = asyncio.Lock()
@@ -91,9 +91,14 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tmdb_miss (
                 search_key TEXT PRIMARY KEY,
-                checked_at REAL NOT NULL
+                checked_at REAL NOT NULL,
+                match_version INTEGER DEFAULT 1
             )
         """)
+        try:
+            await db.execute("ALTER TABLE tmdb_miss ADD COLUMN match_version INTEGER DEFAULT 1")
+        except Exception:
+            pass
         await db.commit()
 
 
@@ -118,18 +123,22 @@ async def is_recent_miss(search_key: str, ttl_days: int) -> bool:
     """True if TMDB found nothing for this key within the last ttl_days."""
     async with aiosqlite.connect(DB_PATH, timeout=15.0) as db:
         cursor = await db.execute(
-            "SELECT checked_at FROM tmdb_miss WHERE search_key = ?", (search_key,)
+            "SELECT checked_at, match_version FROM tmdb_miss WHERE search_key = ?", (search_key,)
         )
         row = await cursor.fetchone()
-    return bool(row and (time.time() - row[0]) < ttl_days * 86400)
+    return bool(
+        row
+        and (row[1] or 1) >= MATCH_VERSION
+        and (time.time() - row[0]) < ttl_days * 86400
+    )
 
 
 async def record_miss(search_key: str) -> None:
     async with _write_lock:
         async with aiosqlite.connect(DB_PATH, timeout=15.0) as db:
             await db.execute(
-                "INSERT OR REPLACE INTO tmdb_miss (search_key, checked_at) VALUES (?, ?)",
-                (search_key, time.time()),
+                "INSERT OR REPLACE INTO tmdb_miss (search_key, checked_at, match_version) VALUES (?, ?, ?)",
+                (search_key, time.time(), MATCH_VERSION),
             )
             await db.commit()
 
