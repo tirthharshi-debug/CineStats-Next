@@ -440,6 +440,23 @@ class GenrePosterTests(unittest.TestCase):
         comm = compute_community_comparison(enriched, ratings_df, diary_df)
         self.assertEqual(comm["latest_five_star"][0]["poster_path"], "/fall2006.jpg")
 
+    def test_oldest_matched_film_ignores_empty_release_date_and_invalid_years(self):
+        import pandas as pd
+        from app.services.stats_service import compute_advanced_stats
+
+        enriched = [
+            {"title": "Adolescence", "year": 2025, "tmdb": {"title": "Adolescence", "year": 2025, "release_date": "", "poster_path": "/adol.jpg", "genres": []}},
+            {"title": "Invalid Zero", "year": 0, "tmdb": {"title": "Invalid Zero", "year": 0, "release_date": "", "poster_path": None, "genres": []}},
+            {"title": "Missing Year", "year": None, "tmdb": {"title": "Missing Year", "year": None, "release_date": None, "poster_path": None, "genres": []}},
+            {"title": "Man Walking Around a Corner", "year": 1887, "tmdb": {"title": "Man Walking Around a Corner", "year": 1887, "release_date": "1887-08-18", "poster_path": "/man.jpg", "genres": []}},
+            {"title": "12 Angry Men", "year": 1957, "tmdb": {"title": "12 Angry Men", "year": 1957, "release_date": "1957-04-10", "poster_path": "/12am.jpg", "genres": []}},
+        ]
+        adv = compute_advanced_stats(enriched, pd.DataFrame(), pd.DataFrame())
+        self.assertEqual(adv["oldest_film"]["title"], "Man Walking Around a Corner")
+        self.assertEqual(adv["oldest_film"]["year"], 1887)
+        self.assertEqual(adv["newest_film"]["title"], "Adolescence")
+        self.assertEqual(adv["newest_film"]["year"], 2025)
+
 
 if __name__ == "__main__":
     unittest.main()

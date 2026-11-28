@@ -621,18 +621,23 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
     results["taste_profile"] = taste_labels
 
     # ─── Release Year Stats ───
-    # Collect (release_date, year, title) for proper chronological ordering
+    max_valid_year = datetime.now().year + 1
     film_entries = []
     for m in enriched_movies:
         tmdb = m.get("tmdb")
         if not tmdb:
             continue
-        yr = tmdb.get("year")
-        if yr is None:
+        raw_yr = tmdb.get("year")
+        if raw_yr is None:
             continue
-        yr = int(yr)
-        release_date = tmdb.get("release_date", str(yr))
-        title = tmdb.get("title", m.get("title", "Unknown"))
+        try:
+            yr = int(raw_yr)
+        except (TypeError, ValueError):
+            continue
+        if yr < 1870 or yr > max_valid_year:
+            continue
+        release_date = str(tmdb.get("release_date") or "").strip()
+        title = tmdb.get("title") or m.get("title", "Unknown")
         film_entries.append({
             "release_date": release_date,
             "year": yr,
@@ -644,10 +649,14 @@ def compute_advanced_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
         release_years = [f["year"] for f in film_entries]
         results["average_release_year"] = round(sum(release_years) / len(release_years))
 
-        # Sort by release_date string (YYYY-MM-DD sorts chronologically)
-        sorted_by_date = sorted(film_entries, key=lambda f: f["release_date"] or "0000")
-        oldest = sorted_by_date[0]
-        newest = sorted_by_date[-1]
+        oldest = min(
+            film_entries,
+            key=lambda f: (f["year"], f["release_date"] or f"{f['year']:04d}-99-99", f["title"].lower()),
+        )
+        newest = max(
+            film_entries,
+            key=lambda f: (f["year"], f["release_date"] or f"{f['year']:04d}-00-00", f["title"].lower()),
+        )
         results["oldest_film"] = {key: oldest[key] for key in ("title", "year", "poster_path")}
         results["newest_film"] = {key: newest[key] for key in ("title", "year", "poster_path")}
     else:
