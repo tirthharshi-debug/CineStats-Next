@@ -100,3 +100,5 @@ npm run audit:prod
 ---
 
 Film metadata and poster images are provided by the [TMDB API](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB. CineStats is an independent project and is not affiliated with Letterboxd.
+
+Suggestions and feedback are always welcome.
