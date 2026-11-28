@@ -505,6 +505,10 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
     }
 
     # ─── Runtime Analytics ───
+    # Cap standalone feature runtime at 360 min (6 h) and skip TV-only genres so
+    # limited series logged on Letterboxd (e.g. 460-min series stubs) don't skew Longest film.
+    max_feature_runtime = 360
+    tv_only_genres = {"action & adventure", "kids", "news", "reality", "sci-fi & fantasy", "soap", "talk", "war & politics"}
     runtimes = []
     longest_film = None
     shortest_film = None
@@ -522,7 +526,12 @@ def compute_patron_stats(enriched_movies: list[dict], diary_df: pd.DataFrame,
             "runtime": rt,
             "poster_path": tmdb.get("poster_path"),
         }
-        if not longest_film or rt > longest_film["runtime"]:
+        genre_names = {
+            str(g.get("name") if isinstance(g, dict) else g).strip().lower()
+            for g in (tmdb.get("genres") or [])
+        }
+        is_feature_candidate = rt <= max_feature_runtime and not (genre_names & tv_only_genres)
+        if is_feature_candidate and (not longest_film or rt > longest_film["runtime"]):
             longest_film = dict(film_info)
         if not shortest_film or rt < shortest_film["runtime"]:
             shortest_film = dict(film_info)

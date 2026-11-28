@@ -457,6 +457,23 @@ class GenrePosterTests(unittest.TestCase):
         self.assertEqual(adv["newest_film"]["title"], "Adolescence")
         self.assertEqual(adv["newest_film"]["year"], 2025)
 
+    def test_longest_film_excludes_series_and_unrealistic_runtimes(self):
+        import pandas as pd
+        from app.services.stats_service import compute_patron_stats
+
+        enriched = [
+            {"title": "The Penguin", "year": 2024, "tmdb": {"title": "The Penguin", "year": 2024, "runtime": 460, "poster_path": None, "genres": [], "directors": [], "cast_members": [], "production_countries": [], "spoken_languages": []}},
+            {"title": "Series Entry", "year": 2023, "tmdb": {"title": "Series Entry", "year": 2023, "runtime": 240, "poster_path": "/s.jpg", "genres": [{"name": "Sci-Fi & Fantasy"}], "directors": [], "cast_members": [], "production_countries": [], "spoken_languages": []}},
+            {"title": "The Irishman", "year": 2019, "tmdb": {"title": "The Irishman", "year": 2019, "runtime": 209, "poster_path": "/irishman.jpg", "genres": [{"name": "Crime"}, {"name": "Drama"}], "directors": [], "cast_members": [], "production_countries": [], "spoken_languages": []}},
+            {"title": "Short Film", "year": 2020, "tmdb": {"title": "Short Film", "year": 2020, "runtime": 12, "poster_path": "/short.jpg", "genres": [{"name": "Drama"}], "directors": [], "cast_members": [], "production_countries": [], "spoken_languages": []}},
+        ]
+        patron = compute_patron_stats(enriched, pd.DataFrame(), pd.DataFrame())
+        rt = patron["runtime_analytics"]
+        self.assertEqual(rt["longest_film"]["title"], "The Irishman")
+        self.assertEqual(rt["longest_film"]["runtime"], 209)
+        self.assertEqual(rt["shortest_film"]["title"], "Short Film")
+        self.assertEqual(rt["total_runtime_minutes"], 460 + 240 + 209 + 12)
+
 
 if __name__ == "__main__":
     unittest.main()
