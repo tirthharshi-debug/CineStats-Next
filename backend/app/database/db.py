@@ -23,9 +23,10 @@ _CACHE_COLUMNS = (
     "year, search_key, genres, directors, cast_members, runtime, "
     "production_countries, original_language, spoken_languages, release_date, "
     "poster_path, COALESCE(backdrop_path, json_extract(raw_details, '$.backdrop_path')) AS backdrop_path, "
-    "vote_average, popularity"
+    "vote_average, popularity, match_version"
 )
 _JSON_FIELDS = ["genres", "directors", "cast_members", "production_countries", "spoken_languages"]
+MATCH_VERSION = 2
 
 # Serializes all SQLite write operations across concurrent async tasks.
 _write_lock = asyncio.Lock()
@@ -67,13 +68,18 @@ async def init_db():
                 backdrop_path TEXT,
                 vote_average REAL,
                 popularity REAL,
+                match_version INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        try:
-            await db.execute("ALTER TABLE tmdb_cache ADD COLUMN backdrop_path TEXT")
-        except Exception:
-            pass
+        for col_sql in (
+            "ALTER TABLE tmdb_cache ADD COLUMN backdrop_path TEXT",
+            "ALTER TABLE tmdb_cache ADD COLUMN match_version INTEGER DEFAULT 1",
+        ):
+            try:
+                await db.execute(col_sql)
+            except Exception:
+                pass
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_search_key ON tmdb_cache(search_key)
         """)
@@ -142,8 +148,8 @@ async def cache_movie(movie_data: dict):
                 INSERT OR REPLACE INTO tmdb_cache 
                 (tmdb_id, title, year, search_key, raw_details, genres, directors, 
                  cast_members, runtime, production_countries, original_language, 
-                 spoken_languages, release_date, poster_path, backdrop_path, vote_average, popularity)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 spoken_languages, release_date, poster_path, backdrop_path, vote_average, popularity, match_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 data.get("tmdb_id"),
                 data.get("title"),
@@ -162,6 +168,7 @@ async def cache_movie(movie_data: dict):
                 data.get("backdrop_path"),
                 data.get("vote_average"),
                 data.get("popularity"),
+                data.get("match_version", MATCH_VERSION),
             ))
             await db.commit()
 

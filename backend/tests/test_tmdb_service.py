@@ -37,6 +37,19 @@ class MatchSelectionTests(unittest.TestCase):
         self.assertIsNone(TMDBService._pick_best_match(bad_only, "The Fall", 2006))
         self.assertIsNone(TMDBService._pick_best_match(bad_only, "Missing", 2020))
 
+    def test_festival_vs_theatrical_year_offset_prefers_major_feature(self):
+        # Letterboxd logs festival premiere year (2022) for "Three of Us",
+        # while TMDB indexes theatrical release as 2023-11-03.
+        candidates = [
+            {"id": 1001, "title": "Three of Us", "original_title": "Three of Us",
+             "release_date": "2022-05-01", "popularity": 0.6, "vote_count": 1},
+            {"id": 2002, "title": "Three of Us", "original_title": "Three of Us",
+             "release_date": "2023-11-03", "popularity": 8.4, "vote_count": 42},
+        ]
+        chosen = TMDBService._pick_best_match(candidates, "Three of Us", 2022)
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["id"], 2002)
+
 
 class CredentialTests(unittest.TestCase):
     def test_key_goes_in_query_only_without_bearer_token(self):
@@ -99,6 +112,59 @@ class MissCacheTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(search.await_count, 1)
                 self.assertEqual(refreshed["title"], "The Fall")
                 self.assertEqual(refreshed["poster_path"], "/fall.jpg")
+        finally:
+            await service.close()
+
+    async def test_three_of_us_2022_resolves_to_2023_feature_and_refreshes_v1_cache(self):
+        await db.init_db()
+        await db.cache_movie({
+            "tmdb_id": 1001,
+            "title": "Three of Us",
+            "year": 2022,
+            "search_key": "three_of_us_2022",
+            "raw_details": {"id": 1001, "title": "Three of Us", "original_title": "Three of Us"},
+            "genres": [],
+            "directors": [],
+            "cast_members": [],
+            "runtime": 40,
+            "production_countries": [],
+            "original_language": "en",
+            "spoken_languages": [],
+            "release_date": "2022-05-01",
+            "poster_path": "/short.jpg",
+            "backdrop_path": None,
+            "vote_average": 5.0,
+            "popularity": 0.6,
+            "match_version": 1,
+        })
+        service = TMDBService()
+        try:
+            search_payload = {
+                "results": [
+                    {"id": 1001, "title": "Three of Us", "original_title": "Three of Us",
+                     "release_date": "2022-05-01", "popularity": 0.6, "vote_count": 1},
+                    {"id": 2002, "title": "Three of Us", "original_title": "Three of Us",
+                     "release_date": "2023-11-03", "popularity": 8.4, "vote_count": 42},
+                ]
+            }
+            details_payload = {
+                "id": 2002, "title": "Three of Us", "original_title": "Three of Us",
+                "release_date": "2023-11-03", "poster_path": "/threeofus.jpg",
+                "backdrop_path": "/threeofus-bd.jpg", "runtime": 99,
+                "genres": [{"id": 18, "name": "Drama"}],
+                "credits": {"crew": [{"id": 10, "name": "Avinash Arun", "job": "Director"}], "cast": []},
+                "production_countries": [{"iso_3166_1": "IN", "name": "India"}],
+                "spoken_languages": [{"iso_639_1": "hi", "english_name": "Hindi"}],
+                "vote_average": 7.4, "popularity": 8.4,
+            }
+            with patch.object(service, "_rate_limited_request", AsyncMock(return_value=search_payload)) as req, \
+                 patch.object(service, "get_movie_details", AsyncMock(return_value=details_payload)):
+                enriched = await service.enrich_movie("Three of Us", 2022)
+                self.assertEqual(req.await_count, 1)
+                self.assertNotIn("year", req.await_args.args[1])
+                self.assertEqual(enriched["tmdb_id"], 2002)
+                self.assertEqual(enriched["runtime"], 99)
+                self.assertEqual(enriched["year"], 2023)
         finally:
             await service.close()
 

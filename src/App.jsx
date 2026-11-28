@@ -328,7 +328,7 @@ function Footer({ onImport, dashboard = false }) {
         <p>This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org/about/logos-attribution" target="_blank" rel="noopener noreferrer">TMDB logo and attribution guidelines <ArrowUpRight size={12} /></a></p>
       </div>
       <div className="footer-bottom"><span>© 2026 CINESTATS</span><span>INDEPENDENT · UNOFFICIAL · FOR CINEPHILES</span></div>
-      <p className="tmdb-attribution">This product uses the TMDB API but is not endorsed or certified by TMDB. Letterboxd is a trademark of its owners; CineStats is not affiliated with Letterboxd.</p>
+      <p className="tmdb-attribution">Letterboxd is a trademark of its owners; CineStats is not affiliated with Letterboxd.</p>
     </footer>
   );
 }

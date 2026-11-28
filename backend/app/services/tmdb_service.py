@@ -7,6 +7,7 @@ guarantees at most RATE_LIMIT_PER_WINDOW API requests in any 10-second window.
 """
 import asyncio
 import logging
+import math
 import os
 import re
 import unicodedata
@@ -14,7 +15,7 @@ import weakref
 
 import httpx
 from app import config
-from app.database.db import get_cached_movie, cache_movie, is_recent_miss, record_miss
+from app.database.db import MATCH_VERSION, get_cached_movie, cache_movie, is_recent_miss, record_miss
 
 logger = logging.getLogger("cinestats.tmdb")
 
@@ -143,26 +144,26 @@ class TMDBService:
         return f"{clean}_{year}" if year else clean
 
     async def search_movie(self, title: str, year: int | None = None) -> dict | None:
-        """Search for a movie by title and optional year."""
-        params = self._auth_params({"query": title})
-        if year:
-            params["year"] = year
-
+        """Search for a movie by title, evaluating year and year +/- 1 candidates."""
+        base_params = self._auth_params({"query": title})
         data = await self._rate_limited_request(
-            f"{TMDB_BASE_URL}/search/movie", params
+            f"{TMDB_BASE_URL}/search/movie", dict(base_params)
         )
+        results = list(data.get("results") or []) if data else []
+        match = self._pick_best_match(results, title, year) if results else None
 
-        if not data or not data.get("results"):
-            # Retry without year if no results
-            if year:
-                params.pop("year", None)
-                data = await self._rate_limited_request(
-                    f"{TMDB_BASE_URL}/search/movie", params
+        if match is None and year is not None:
+            fallback_results: list[dict] = []
+            for candidate_year in (year, year + 1, year - 1):
+                year_data = await self._rate_limited_request(
+                    f"{TMDB_BASE_URL}/search/movie", dict(base_params, year=candidate_year)
                 )
-            if not data or not data.get("results"):
-                return None
+                if year_data and year_data.get("results"):
+                    fallback_results.extend(year_data["results"])
+            if fallback_results:
+                match = self._pick_best_match(fallback_results, title, year)
 
-        return self._pick_best_match(data["results"], title, year)
+        return match
 
     @staticmethod
     def _release_year(result: dict) -> int | None:
@@ -221,20 +222,21 @@ class TMDBService:
             ry = cls._release_year(r)
             if year is not None:
                 if ry == year:
-                    year_tier = 2
+                    year_bonus = 2.0
                 elif ry is not None and abs(ry - year) <= 1:
-                    year_tier = 1
+                    year_bonus = 1.2
                 elif ry is None and is_exact:
-                    year_tier = 0
+                    year_bonus = 0.0
                 else:
                     return None
             else:
-                year_tier = 1
+                year_bonus = 1.0
 
             title_tier = 2 if is_exact else 1
-            pop = float(r.get("popularity") or 0)
-            votes = float(r.get("vote_count") or 0)
-            return (title_tier, year_tier, pop, votes)
+            pop = max(0.0, float(r.get("popularity") or 0))
+            votes = max(0.0, float(r.get("vote_count") or 0))
+            prominence = math.log1p(votes) * 0.6 + math.log1p(pop) * 0.3
+            return (title_tier, round(year_bonus + prominence, 6), votes, pop)
 
         ranked = []
         for r in results:
@@ -359,10 +361,14 @@ class TMDBService:
         """Full pipeline: check cache → search → fetch details → cache result."""
         search_key = self._make_search_key(title, year)
 
-        # Re-validate cached rows against strict title/year matching so stale
-        # bad matches are automatically refreshed.
+        # Re-validate cached rows against match_version and strict title/year matching
+        # so stale bad matches are automatically refreshed.
         cached = await get_cached_movie(search_key)
-        if cached and self._pick_best_match([cached], title, year) is not None:
+        if (
+            cached
+            and (cached.get("match_version") or 1) >= MATCH_VERSION
+            and self._pick_best_match([cached], title, year) is not None
+        ):
             return cached
 
         if await is_recent_miss(search_key, config.TMDB_MISS_TTL_DAYS):
@@ -430,6 +436,7 @@ class TMDBService:
             "backdrop_path": details.get("backdrop_path"),
             "vote_average": details.get("vote_average"),
             "popularity": details.get("popularity"),
+            "match_version": MATCH_VERSION,
         }
 
         await cache_movie(movie_data)
